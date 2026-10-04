@@ -107,7 +107,7 @@ class ShiftAssignmentControllerTest {
             .andExpect(jsonPath("$.createdAt").isString());
     }
 
-    // US13 S2: driver overlap returns 409
+    // US13 S2: driver overlap returns 409 and count is unchanged
     @Test
     void createShiftAssignment_driverOverlap_returns409() throws Exception {
         mockMvc.perform(post(URL).with(supervisor1Jwt())
@@ -116,15 +116,18 @@ class ShiftAssignmentControllerTest {
             .andExpect(status().isCreated());
 
         Bus bus1b = busRepository.save(Bus.create(company1.getId(), "CTL-BUS1B", () -> "ctrl-qr1b"));
+        long countAfterFirst = assignmentRepository.count();
 
         mockMvc.perform(post(URL).with(supervisor1Jwt())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body(driver1.getId(), bus1b.getId(), route1.getId(), T2, T4)))
             .andExpect(status().isConflict())
             .andExpect(jsonPath("$.code").value("ASSIGNMENT_OVERLAP"));
+
+        assertEquals(countAfterFirst, assignmentRepository.count());
     }
 
-    // US13 S2: bus overlap returns 409
+    // US13 S2: bus overlap returns 409 and count is unchanged
     @Test
     void createShiftAssignment_busOverlap_returns409() throws Exception {
         mockMvc.perform(post(URL).with(supervisor1Jwt())
@@ -134,12 +137,15 @@ class ShiftAssignmentControllerTest {
 
         Driver driver1b = driverRepository.save(Driver.create(company1.getId(), 102L, "Ctrl Driver 1b",
             () -> "ctrl-cred1b", Duration.ofDays(365), FIXED_CLOCK));
+        long countAfterFirst = assignmentRepository.count();
 
         mockMvc.perform(post(URL).with(supervisor1Jwt())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body(driver1b.getId(), bus1.getId(), route1.getId(), T2, T4)))
             .andExpect(status().isConflict())
             .andExpect(jsonPath("$.code").value("ASSIGNMENT_OVERLAP"));
+
+        assertEquals(countAfterFirst, assignmentRepository.count());
     }
 
     // Contiguous periods (end == next start) must succeed
@@ -300,5 +306,73 @@ class ShiftAssignmentControllerTest {
             .andExpect(jsonPath("$.code").value("RESOURCE_NOT_IN_COMPANY"));
 
         assertEquals(before, assignmentRepository.count());
+    }
+
+    // Foreign driver (company2) with own bus and route -> 422 RESOURCE_NOT_IN_COMPANY and count unchanged
+    @Test
+    void createShiftAssignment_foreignDriver_returns422AndCountUnchanged() throws Exception {
+        long before = assignmentRepository.count();
+
+        mockMvc.perform(post(URL).with(supervisor1Jwt())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body(driver2.getId(), bus1.getId(), route1.getId(), T1, T2)))
+            .andExpect(status().isUnprocessableEntity())
+            .andExpect(jsonPath("$.code").value("RESOURCE_NOT_IN_COMPANY"));
+
+        assertEquals(before, assignmentRepository.count());
+    }
+
+    // Foreign route (company2) with own bus and driver -> 422 RESOURCE_NOT_IN_COMPANY and count unchanged
+    @Test
+    void createShiftAssignment_foreignRoute_returns422AndCountUnchanged() throws Exception {
+        long before = assignmentRepository.count();
+
+        mockMvc.perform(post(URL).with(supervisor1Jwt())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body(driver1.getId(), bus1.getId(), route2.getId(), T1, T2)))
+            .andExpect(status().isUnprocessableEntity())
+            .andExpect(jsonPath("$.code").value("RESOURCE_NOT_IN_COMPANY"));
+
+        assertEquals(before, assignmentRepository.count());
+    }
+
+    // Non-existent driver ID must produce byte-for-byte identical response to a foreign driver
+    @Test
+    void createShiftAssignment_foreignDriverAndNonExistentDriver_sameResponseBody() throws Exception {
+        String foreignBody = mockMvc.perform(post(URL).with(supervisor1Jwt())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body(driver2.getId(), bus1.getId(), route1.getId(), T1, T2)))
+            .andExpect(status().isUnprocessableEntity())
+            .andExpect(jsonPath("$.code").value("RESOURCE_NOT_IN_COMPANY"))
+            .andReturn().getResponse().getContentAsString();
+
+        String nonExistentBody = mockMvc.perform(post(URL).with(supervisor1Jwt())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body(999998L, bus1.getId(), route1.getId(), T1, T2)))
+            .andExpect(status().isUnprocessableEntity())
+            .andExpect(jsonPath("$.code").value("RESOURCE_NOT_IN_COMPANY"))
+            .andReturn().getResponse().getContentAsString();
+
+        assertEquals(foreignBody, nonExistentBody);
+    }
+
+    // Non-existent route ID must produce byte-for-byte identical response to a foreign route
+    @Test
+    void createShiftAssignment_foreignRouteAndNonExistentRoute_sameResponseBody() throws Exception {
+        String foreignBody = mockMvc.perform(post(URL).with(supervisor1Jwt())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body(driver1.getId(), bus1.getId(), route2.getId(), T1, T2)))
+            .andExpect(status().isUnprocessableEntity())
+            .andExpect(jsonPath("$.code").value("RESOURCE_NOT_IN_COMPANY"))
+            .andReturn().getResponse().getContentAsString();
+
+        String nonExistentBody = mockMvc.perform(post(URL).with(supervisor1Jwt())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body(driver1.getId(), bus1.getId(), 999997L, T1, T2)))
+            .andExpect(status().isUnprocessableEntity())
+            .andExpect(jsonPath("$.code").value("RESOURCE_NOT_IN_COMPANY"))
+            .andReturn().getResponse().getContentAsString();
+
+        assertEquals(foreignBody, nonExistentBody);
     }
 }

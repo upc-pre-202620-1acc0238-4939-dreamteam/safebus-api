@@ -63,6 +63,17 @@ class RouteControllerTest {
     }
 
     @Test
+    void createRoute_passengerRole_returns403() throws Exception {
+        mockMvc.perform(post(URL)
+                .with(jwt()
+                    .jwt(b -> b.claim("role", "PASSENGER").subject("20"))
+                    .authorities(new SimpleGrantedAuthority("ROLE_PASSENGER")))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Route\",\"origin\":\"A\",\"destination\":\"B\"}"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
     void createRoute_noToken_returns401() throws Exception {
         mockMvc.perform(post(URL)
                 .contentType(MediaType.APPLICATION_JSON)
