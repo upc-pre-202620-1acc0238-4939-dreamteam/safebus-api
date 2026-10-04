@@ -16,4 +16,6 @@ public interface DriverRepository extends JpaRepository<Driver, Long> {
     Optional<Driver> findByIdForUpdate(@Param("id") Long id);
 
     Optional<Driver> findByQrCredential(String qrCredential);
+
+    Optional<Driver> findByUserAccountId(Long userAccountId);
 }
