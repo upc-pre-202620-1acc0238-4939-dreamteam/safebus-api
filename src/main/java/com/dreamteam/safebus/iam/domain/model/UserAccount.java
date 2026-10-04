@@ -11,6 +11,7 @@ import jakarta.persistence.Id;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Locale;
 
 @Entity
 public class UserAccount {
@@ -57,7 +58,7 @@ public class UserAccount {
             throw new RuleViolationException("COMPANY_FORBIDDEN", "PASSENGER must not have a companyId");
         }
         UserAccount account = new UserAccount();
-        account.loginId = loginId.trim();
+        account.loginId = loginId.trim().toLowerCase(Locale.ROOT);
         account.passwordHash = passwordHash;
         account.role = role;
         account.companyId = companyId;

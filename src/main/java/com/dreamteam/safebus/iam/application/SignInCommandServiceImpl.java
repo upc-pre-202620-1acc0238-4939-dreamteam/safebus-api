@@ -38,7 +38,8 @@ public class SignInCommandServiceImpl implements SignInCommandService {
 
     @Override
     public SignInResult signIn(SignInCommand command) {
-        Optional<UserAccount> accountOpt = repository.findByLoginId(command.loginId());
+        String loginId = command.loginId().trim().toLowerCase(java.util.Locale.ROOT);
+        Optional<UserAccount> accountOpt = repository.findByLoginId(loginId);
         String hashToCheck = accountOpt.map(UserAccount::getPasswordHash).orElse(dummyHash);
         boolean passwordMatches = passwordEncoder.matches(command.password(), hashToCheck);
 

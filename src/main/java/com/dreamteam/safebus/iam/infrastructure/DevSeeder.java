@@ -20,11 +20,11 @@ public class DevSeeder {
 
     @PostConstruct
     public void seed() {
-        if (!repository.existsByLoginId("SUP-001")) {
-            iam.createSupervisorAccount("SUP-001", "Safebus2024!", 1L);
+        if (!repository.existsByLoginId("sup-001")) {
+            iam.createSupervisorAccount("sup-001", "Safebus2024!", 1L);
         }
-        if (!repository.existsByLoginId("DRV-001")) {
-            iam.createDriverAccount("DRV-001", "Safebus2024!", 1L);
+        if (!repository.existsByLoginId("drv-001")) {
+            iam.createDriverAccount("drv-001", "Safebus2024!", 1L);
         }
     }
 }

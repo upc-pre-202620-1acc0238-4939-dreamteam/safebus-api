@@ -49,11 +49,12 @@ public class UserAccountCommandServiceImpl implements UserAccountCommandService 
 
     private Long create(String loginId, String rawPassword, UserRole role, Long companyId) {
         validatePasswordLength(rawPassword);
-        if (repository.existsByLoginId(loginId.trim())) {
+        String normalizedLoginId = loginId.trim().toLowerCase(java.util.Locale.ROOT);
+        if (repository.existsByLoginId(normalizedLoginId)) {
             throw new ConflictException("LOGIN_ID_TAKEN", "loginId already in use");
         }
         String hash = passwordEncoder.encode(rawPassword);
-        UserAccount account = UserAccount.create(loginId, hash, role, companyId, clock);
+        UserAccount account = UserAccount.create(normalizedLoginId, hash, role, companyId, clock);
         try {
             return repository.save(account).getId();
         } catch (DataIntegrityViolationException e) {
