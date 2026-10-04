@@ -33,4 +33,9 @@ public class TestExceptionController {
     public void forbidden() {
         throw new ForbiddenOperationException("operation not allowed");
     }
+
+    @GetMapping("/custom-code")
+    public void customCode() {
+        throw new RuleViolationException("INVALID_TRANSITION", "Closure requires started attention");
+    }
 }

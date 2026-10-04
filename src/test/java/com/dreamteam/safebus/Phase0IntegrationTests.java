@@ -68,4 +68,11 @@ class Phase0IntegrationTests {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("FORBIDDEN_OPERATION"));
     }
+
+    @Test
+    void customCode_returns422_withCallerSuppliedCode() throws Exception {
+        mockMvc.perform(get("/api/v1/test-exceptions/custom-code").with(jwt()))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("INVALID_TRANSITION"));
+    }
 }
