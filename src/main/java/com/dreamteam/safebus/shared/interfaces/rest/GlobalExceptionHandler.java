@@ -4,6 +4,7 @@ import com.dreamteam.safebus.shared.domain.exceptions.ConflictException;
 import com.dreamteam.safebus.shared.domain.exceptions.ForbiddenOperationException;
 import com.dreamteam.safebus.shared.domain.exceptions.NotFoundException;
 import com.dreamteam.safebus.shared.domain.exceptions.RuleViolationException;
+import com.dreamteam.safebus.shared.domain.exceptions.UnauthorizedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.validation.FieldError;
@@ -16,6 +17,13 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(UnauthorizedException.class)
+    public ProblemDetail handleUnauthorized(UnauthorizedException ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        pd.setProperty("code", ex.code());
+        return pd;
+    }
 
     @ExceptionHandler(NotFoundException.class)
     public ProblemDetail handleNotFound(NotFoundException ex) {

@@ -97,6 +97,13 @@ class Phase0IntegrationTests {
     }
 
     @Test
+    void unauthorized_returns401_withCode() throws Exception {
+        mockMvc.perform(get("/api/v1/test-exceptions/unauthorized").with(jwt()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_FAILED"));
+    }
+
+    @Test
     void swaggerUi_isNotUnauthorized() throws Exception {
         MvcResult result = mockMvc.perform(get("/swagger-ui.html"))
                 .andReturn();
