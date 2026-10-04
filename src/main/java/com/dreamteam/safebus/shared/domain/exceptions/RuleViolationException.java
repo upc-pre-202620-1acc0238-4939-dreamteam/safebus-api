@@ -3,11 +3,10 @@ package com.dreamteam.safebus.shared.domain.exceptions;
 public class RuleViolationException extends DomainException {
 
     public RuleViolationException(String message) {
-        super(message);
+        super("RULE_VIOLATION", message);
     }
 
-    @Override
-    public String code() {
-        return "RULE_VIOLATION";
+    public RuleViolationException(String code, String message) {
+        super(code, message);
     }
 }

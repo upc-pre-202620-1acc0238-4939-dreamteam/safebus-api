@@ -3,11 +3,10 @@ package com.dreamteam.safebus.shared.domain.exceptions;
 public class NotFoundException extends DomainException {
 
     public NotFoundException(String message) {
-        super(message);
+        super("NOT_FOUND", message);
     }
 
-    @Override
-    public String code() {
-        return "NOT_FOUND";
+    public NotFoundException(String code, String message) {
+        super(code, message);
     }
 }

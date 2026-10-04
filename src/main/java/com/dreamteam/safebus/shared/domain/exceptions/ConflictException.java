@@ -3,11 +3,10 @@ package com.dreamteam.safebus.shared.domain.exceptions;
 public class ConflictException extends DomainException {
 
     public ConflictException(String message) {
-        super(message);
+        super("CONFLICT", message);
     }
 
-    @Override
-    public String code() {
-        return "CONFLICT";
+    public ConflictException(String code, String message) {
+        super(code, message);
     }
 }

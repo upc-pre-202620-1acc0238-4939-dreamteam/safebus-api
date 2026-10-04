@@ -2,9 +2,14 @@ package com.dreamteam.safebus.shared.domain.exceptions;
 
 public abstract class DomainException extends RuntimeException {
 
-    protected DomainException(String message) {
+    private final String code;
+
+    protected DomainException(String code, String message) {
         super(message);
+        this.code = code;
     }
 
-    public abstract String code();
+    public String code() {
+        return code;
+    }
 }
