@@ -9,12 +9,15 @@ import com.dreamteam.safebus.shared.application.CurrentUserProvider;
 import com.dreamteam.safebus.shared.domain.exceptions.ConflictException;
 import com.dreamteam.safebus.shared.domain.exceptions.RuleViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 
 @Service
-@Transactional
+// READ_COMMITTED ensures overlap queries see rows committed by concurrent transactions that hold the lock,
+// preventing both requests from inserting when MySQL InnoDB's REPEATABLE_READ snapshot is stale.
+@Transactional(isolation = Isolation.READ_COMMITTED)
 public class CreateShiftAssignmentCommandServiceImpl implements CreateShiftAssignmentCommandService {
 
     private static final String NOT_IN_COMPANY = "RESOURCE_NOT_IN_COMPANY";
