@@ -4,6 +4,7 @@ import com.dreamteam.safebus.shared.domain.exceptions.ConflictException;
 import com.dreamteam.safebus.shared.domain.exceptions.ForbiddenOperationException;
 import com.dreamteam.safebus.shared.domain.exceptions.NotFoundException;
 import com.dreamteam.safebus.shared.domain.exceptions.RuleViolationException;
+import com.dreamteam.safebus.shared.domain.exceptions.UnauthorizedException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.context.annotation.Profile;
@@ -37,6 +38,11 @@ public class TestExceptionController {
     @GetMapping("/forbidden")
     public void forbidden() {
         throw new ForbiddenOperationException("operation not allowed");
+    }
+
+    @GetMapping("/unauthorized")
+    public void unauthorized() {
+        throw new UnauthorizedException("Not authenticated");
     }
 
     @GetMapping("/custom-code")
