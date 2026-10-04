@@ -6,14 +6,12 @@ import com.dreamteam.safebus.iam.infrastructure.security.JwtTokenIssuer;
 import com.dreamteam.safebus.shared.domain.exceptions.UnauthorizedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
 
 @Service
-@Transactional(readOnly = true)
 public class SignInCommandServiceImpl implements SignInCommandService {
 
     private static final String INVALID_CREDENTIALS_CODE = "INVALID_CREDENTIALS";
