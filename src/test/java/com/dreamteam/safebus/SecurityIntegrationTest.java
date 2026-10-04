@@ -10,6 +10,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -54,5 +56,14 @@ class SecurityIntegrationTest {
                                 .jwt(b -> b.claim("role", "SUPERVISOR").claim("companyId", 1L).subject("42"))
                                 .authorities(new SimpleGrantedAuthority("ROLE_SUPERVISOR"))))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void corsPreflight_toProtectedPath_returns200WithoutAuthentication() throws Exception {
+        mockMvc.perform(options("/api/v1/auth/sign-out")
+                        .header("Origin", "http://localhost:4200")
+                        .header("Access-Control-Request-Method", "POST"))
+                .andExpect(status().isOk())
+                .andExpect(header().exists("Access-Control-Allow-Origin"));
     }
 }
