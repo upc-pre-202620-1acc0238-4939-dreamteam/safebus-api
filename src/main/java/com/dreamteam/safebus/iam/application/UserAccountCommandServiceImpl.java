@@ -5,6 +5,7 @@ import com.dreamteam.safebus.iam.domain.model.UserRole;
 import com.dreamteam.safebus.iam.domain.repository.UserAccountRepository;
 import com.dreamteam.safebus.shared.domain.exceptions.ConflictException;
 import com.dreamteam.safebus.shared.domain.exceptions.RuleViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,7 +54,11 @@ public class UserAccountCommandServiceImpl implements UserAccountCommandService 
         }
         String hash = passwordEncoder.encode(rawPassword);
         UserAccount account = UserAccount.create(loginId, hash, role, companyId, clock);
-        return repository.save(account).getId();
+        try {
+            return repository.save(account).getId();
+        } catch (DataIntegrityViolationException e) {
+            throw new ConflictException("LOGIN_ID_TAKEN", "loginId already in use");
+        }
     }
 
     private void validatePasswordLength(String rawPassword) {
