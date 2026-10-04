@@ -26,6 +26,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -147,6 +148,43 @@ class AuthControllerTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void signOut_wrongIssuerToken_returns401() throws Exception {
+        String token = buildWrongIssuerToken();
+
+        mockMvc.perform(post(SIGN_OUT_URL)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void signIn_allFailureCases_returnIdenticalBody() throws Exception {
+        var account = userAccountRepository.findByLoginId("ctrl-sup").orElseThrow();
+        account.disable();
+        userAccountRepository.saveAndFlush(account);
+
+        String unknownBody = mockMvc.perform(post(SIGN_IN_URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginId\":\"nobody\",\"password\":\"Password1!\"}"))
+                .andExpect(status().isUnauthorized())
+                .andReturn().getResponse().getContentAsString();
+
+        String disabledBody = mockMvc.perform(post(SIGN_IN_URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginId\":\"ctrl-sup\",\"password\":\"Password1!\"}"))
+                .andExpect(status().isUnauthorized())
+                .andReturn().getResponse().getContentAsString();
+
+        String wrongPassBody = mockMvc.perform(post(SIGN_IN_URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginId\":\"ctrl-pax\",\"password\":\"WrongPass!\"}"))
+                .andExpect(status().isUnauthorized())
+                .andReturn().getResponse().getContentAsString();
+
+        assertEquals(unknownBody, disabledBody);
+        assertEquals(unknownBody, wrongPassBody);
+    }
+
     private String signInAndGetToken(String loginId) throws Exception {
         MvcResult result = mockMvc.perform(post(SIGN_IN_URL)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -164,6 +202,21 @@ class AuthControllerTest {
                 .subject("999")
                 .issueTime(Date.from(past.minus(Duration.ofHours(13))))
                 .expirationTime(Date.from(past))
+                .claim("role", "PASSENGER")
+                .build();
+        SignedJWT jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claims);
+        jwt.sign(new MACSigner(key));
+        return jwt.serialize();
+    }
+
+    private String buildWrongIssuerToken() throws Exception {
+        SecretKey key = new SecretKeySpec(TEST_SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+        Instant now = Instant.now();
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .issuer("wrong-issuer")
+                .subject("999")
+                .issueTime(Date.from(now))
+                .expirationTime(Date.from(now.plus(Duration.ofHours(12))))
                 .claim("role", "PASSENGER")
                 .build();
         SignedJWT jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claims);

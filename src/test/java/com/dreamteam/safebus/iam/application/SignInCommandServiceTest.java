@@ -1,5 +1,7 @@
 package com.dreamteam.safebus.iam.application;
 
+import com.dreamteam.safebus.iam.domain.model.UserAccount;
+import com.dreamteam.safebus.iam.domain.repository.UserAccountRepository;
 import com.dreamteam.safebus.shared.domain.exceptions.UnauthorizedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +30,9 @@ class SignInCommandServiceTest {
 
     @Autowired
     private UserAccountCommandService accountService;
+
+    @Autowired
+    private UserAccountRepository accountRepository;
 
     @Autowired
     private JwtDecoder jwtDecoder;
@@ -80,13 +85,14 @@ class SignInCommandServiceTest {
 
     @Test
     void signIn_disabledAccount_throwsInvalidCredentials() {
-        accountService.createSupervisor("sup-disabled", "Password1!", 1L);
-        // Manually disable through repository is not available here, so we test
-        // that invalid credentials (wrong password for disabled) give same error.
-        // The disable path is tested by checking same code/message.
+        UserAccount account = accountRepository.findByLoginId("sup-signin").orElseThrow();
+        account.disable();
+        accountRepository.saveAndFlush(account);
+
         UnauthorizedException ex = assertThrows(UnauthorizedException.class,
-                () -> signInService.signIn(new SignInCommand("sup-disabled", "WrongPass!")));
+                () -> signInService.signIn(new SignInCommand("sup-signin", "Password1!")));
         assertEquals("INVALID_CREDENTIALS", ex.code());
+        assertEquals("Invalid credentials", ex.getMessage());
     }
 
     @Test
