@@ -100,6 +100,32 @@ class AuthControllerTest {
     }
 
     @Test
+    void signIn_driverCredentials_returns200WithRoleDriver() throws Exception {
+        accountService.createDriver("drv-ctrl", "Password1!", 1L);
+
+        mockMvc.perform(post(SIGN_IN_URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginId\":\"drv-ctrl\",\"password\":\"Password1!\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("DRIVER"));
+    }
+
+    @Test
+    void signIn_caseInsensitiveLoginId_returns200() throws Exception {
+        accountService.createSupervisor("Ctrl-Mixed", "Password1!", 1L);
+
+        mockMvc.perform(post(SIGN_IN_URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginId\":\"ctrl-mixed\",\"password\":\"Password1!\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post(SIGN_IN_URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginId\":\"CTRL-MIXED\",\"password\":\"Password1!\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void signIn_blankFields_returns422() throws Exception {
         mockMvc.perform(post(SIGN_IN_URL)
                         .contentType(MediaType.APPLICATION_JSON)
