@@ -17,7 +17,7 @@ import java.time.Clock;
 @Transactional
 public class UserAccountCommandServiceImpl implements UserAccountCommandService {
 
-    private static final int MIN_PASSWORD_BYTES = 8;
+    private static final int MIN_PASSWORD_CHARS = 8;
     private static final int MAX_PASSWORD_BYTES = 72;
 
     private final UserAccountRepository repository;
@@ -48,6 +48,9 @@ public class UserAccountCommandServiceImpl implements UserAccountCommandService 
     }
 
     private Long create(String loginId, String rawPassword, UserRole role, Long companyId) {
+        if (loginId == null || loginId.isBlank()) {
+            throw new RuleViolationException("INVALID_LOGIN_ID", "loginId cannot be blank");
+        }
         validatePasswordLength(rawPassword);
         String normalizedLoginId = loginId.trim().toLowerCase(java.util.Locale.ROOT);
         if (repository.existsByLoginId(normalizedLoginId)) {
@@ -63,11 +66,15 @@ public class UserAccountCommandServiceImpl implements UserAccountCommandService 
     }
 
     private void validatePasswordLength(String rawPassword) {
-        int byteLength = rawPassword.getBytes(StandardCharsets.UTF_8).length;
-        if (byteLength < MIN_PASSWORD_BYTES) {
-            throw new RuleViolationException("PASSWORD_TOO_SHORT",
-                    "Password must be at least " + MIN_PASSWORD_BYTES + " bytes");
+        if (rawPassword == null) {
+            throw new RuleViolationException("PASSWORD_REQUIRED", "password is required");
         }
+        int charCount = rawPassword.codePointCount(0, rawPassword.length());
+        if (charCount < MIN_PASSWORD_CHARS) {
+            throw new RuleViolationException("PASSWORD_TOO_SHORT",
+                    "Password must be at least " + MIN_PASSWORD_CHARS + " characters");
+        }
+        int byteLength = rawPassword.getBytes(StandardCharsets.UTF_8).length;
         if (byteLength > MAX_PASSWORD_BYTES) {
             throw new RuleViolationException("PASSWORD_TOO_LONG",
                     "Password must not exceed " + MAX_PASSWORD_BYTES + " bytes");
