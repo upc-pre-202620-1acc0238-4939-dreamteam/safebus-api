@@ -8,13 +8,11 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Table;
 
 import java.time.Clock;
 import java.time.Instant;
 
 @Entity
-@Table(name = "user_accounts")
 public class UserAccount {
 
     @Id
