@@ -78,6 +78,12 @@ class UserAccountTest {
     }
 
     @Test
+    void create_loginIdIsLowercased() {
+        UserAccount account = UserAccount.create("SUP-Mixed", HASH, UserRole.SUPERVISOR, 1L, FIXED_CLOCK);
+        assertEquals("sup-mixed", account.getLoginId());
+    }
+
+    @Test
     void disable_setsEnabledFalse() {
         UserAccount account = UserAccount.create("sup-001", HASH, UserRole.SUPERVISOR, 1L, FIXED_CLOCK);
         account.disable();

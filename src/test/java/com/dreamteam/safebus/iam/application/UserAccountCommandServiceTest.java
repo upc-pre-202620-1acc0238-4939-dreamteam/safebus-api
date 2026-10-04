@@ -80,4 +80,33 @@ class UserAccountCommandServiceTest {
         assertNotNull(repository.findById(id).orElseThrow().getCompanyId());
         assertEquals(5L, repository.findById(id).orElseThrow().getCompanyId());
     }
+
+    @Test
+    void createAccount_nullLoginId_throwsInvalidLoginId() {
+        RuleViolationException ex = assertThrows(RuleViolationException.class,
+                () -> service.createPassenger(null, "password123"));
+        assertEquals("INVALID_LOGIN_ID", ex.code());
+    }
+
+    @Test
+    void createAccount_blankLoginId_throwsInvalidLoginId() {
+        RuleViolationException ex = assertThrows(RuleViolationException.class,
+                () -> service.createPassenger("   ", "password123"));
+        assertEquals("INVALID_LOGIN_ID", ex.code());
+    }
+
+    @Test
+    void createAccount_nullPassword_throwsPasswordRequired() {
+        RuleViolationException ex = assertThrows(RuleViolationException.class,
+                () -> service.createPassenger("pax-nullpw", null));
+        assertEquals("PASSWORD_REQUIRED", ex.code());
+    }
+
+    @Test
+    void createAccount_fourCharEightBytePassword_throwsPasswordTooShort() {
+        // "éàçü" = 4 Unicode code points, 8 UTF-8 bytes — must fail the 8-character minimum
+        RuleViolationException ex = assertThrows(RuleViolationException.class,
+                () -> service.createPassenger("pax-utf8", "éàçü"));
+        assertEquals("PASSWORD_TOO_SHORT", ex.code());
+    }
 }
