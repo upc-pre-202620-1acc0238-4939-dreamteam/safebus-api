@@ -7,9 +7,12 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface EmergencyRepository extends JpaRepository<Emergency, String> {
+
+    List<Emergency> findByBusIdAndShiftIdOrderByReceivedAtDesc(Long busId, Long shiftId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT e FROM Emergency e WHERE e.id = :id")
