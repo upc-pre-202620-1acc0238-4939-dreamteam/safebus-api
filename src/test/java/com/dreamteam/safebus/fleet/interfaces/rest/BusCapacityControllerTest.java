@@ -10,11 +10,16 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -23,7 +28,12 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
@@ -38,7 +48,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class BusCapacityControllerTest {
@@ -51,6 +61,8 @@ class BusCapacityControllerTest {
     @Autowired BusRepository busRepository;
     @Autowired CompanyRepository companyRepository;
     @Autowired ObjectMapper objectMapper;
+    @Autowired JwtEncoder jwtEncoder;
+    @LocalServerPort int port;
     @MockitoBean Clock clock;
 
     private Company company;
@@ -219,6 +231,103 @@ class BusCapacityControllerTest {
         Bus stored = busRepository.findById(bus.getId()).orElseThrow();
         assertEquals(expected, stored.getCapacity());
         assertEquals("R".repeat(100), stored.getCapacityReference());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"DRIVER", "PASSENGER"})
+    void update_otherRolesReturn403AndPreserveCapacity(String role) throws Exception {
+        long count = busRepository.count();
+        mockMvc.perform(put(url(bus.getId())).with(token(role, 42L, company.getId()))
+                .contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(validBody())))
+            .andExpect(status().isForbidden());
+
+        assertEquals(count, busRepository.count());
+        assertUnchanged(bus);
+        assertUnchanged(foreignBus);
+    }
+
+    @Test
+    void update_noTokenReturns401AndPreservesCapacity() throws Exception {
+        long count = busRepository.count();
+        mockMvc.perform(put(url(bus.getId())).contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(validBody())))
+            .andExpect(status().isUnauthorized());
+
+        assertEquals(count, busRepository.count());
+        assertUnchanged(bus);
+        assertUnchanged(foreignBus);
+    }
+
+    @Test
+    void update_foreignAndMissingBusReturnSame403CodeAndDetailWithoutChanges() throws Exception {
+        long count = busRepository.count();
+        var foreignResponse = submit(foreignBus.getId(), validBody()).andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("BUS_ACCESS_DENIED"))
+            .andExpect(jsonPath("$.detail").value("bus is not accessible"))
+            .andReturn().getResponse();
+        assertEquals(count, busRepository.count());
+        assertUnchanged(bus);
+        assertUnchanged(foreignBus);
+
+        var missingResponse = submit(Long.MAX_VALUE, validBody()).andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("BUS_ACCESS_DENIED"))
+            .andReturn().getResponse();
+        assertEquals(count, busRepository.count());
+        assertUnchanged(bus);
+        assertUnchanged(foreignBus);
+
+        var foreign = objectMapper.readTree(foreignResponse.getContentAsString());
+        var missing = objectMapper.readTree(missingResponse.getContentAsString());
+        assertEquals(foreignResponse.getStatus(), missingResponse.getStatus());
+        assertEquals(foreign.get("code"), missing.get("code"));
+        assertEquals(foreign.get("detail"), missing.get("detail"));
+    }
+
+    @Test
+    void update_bodyCannotOverrideCallerAuthorOrCompany() throws Exception {
+        Map<String, Object> body = validBody();
+        body.put("updatedByUserId", 999L);
+        body.put("companyId", otherCompany.getId());
+
+        submit(bus.getId(), body).andExpect(status().isOk()).andExpect(jsonPath("$.updatedByUserId").value(42));
+
+        Bus stored = busRepository.findById(bus.getId()).orElseThrow();
+        assertEquals(42L, stored.getCapacityUpdatedByUserId());
+        assertEquals(company.getId(), stored.getCompanyId());
+        assertEquals(40, stored.getCapacity());
+        assertUnchanged(foreignBus);
+    }
+
+    @Test
+    void update_nonNumericJsonReturnsDefault400BodyOverHttpAndPreservesCapacity() throws Exception {
+        long count = busRepository.count();
+        JwtClaimsSet claims = JwtClaimsSet.builder().issuer("safebus").subject("42")
+            .issuedAt(Instant.parse("2020-01-01T00:00:00Z"))
+            .expiresAt(Instant.parse("2100-01-01T00:00:00Z"))
+            .claim("role", "SUPERVISOR").claim("companyId", company.getId()).build();
+        String bearer = jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + url(bus.getId())))
+            .timeout(Duration.ofSeconds(10))
+            .header("Authorization", "Bearer " + bearer)
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
+            .PUT(HttpRequest.BodyPublishers.ofString("{\"capacity\":\"abc\",\"technicalRecordReference\":\"TECH-NEW\"}"))
+            .build();
+        HttpResponse<String> response;
+        try (HttpClient client = HttpClient.newHttpClient()) {
+            response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        }
+
+        assertEquals(400, response.statusCode(), response.body());
+        var error = objectMapper.readTree(response.body());
+        assertEquals(4, error.size());
+        assertFalse(error.get("timestamp").asString().isBlank());
+        assertEquals(400, error.get("status").intValue());
+        assertEquals("Bad Request", error.get("error").asString());
+        assertEquals(url(bus.getId()), error.get("path").asString());
+        assertEquals(count, busRepository.count());
+        assertUnchanged(bus);
+        assertUnchanged(foreignBus);
     }
 
     private void assertRejected(Map<String, Object> body, String code, String field) throws Exception {
