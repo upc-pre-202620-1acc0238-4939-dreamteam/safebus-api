@@ -4,6 +4,7 @@ import com.dreamteam.safebus.fleet.domain.model.AssignmentStatus;
 import com.dreamteam.safebus.fleet.domain.model.Bus;
 import com.dreamteam.safebus.fleet.domain.model.ShiftAssignment;
 import com.dreamteam.safebus.fleet.domain.repository.BusRepository;
+import com.dreamteam.safebus.fleet.domain.repository.CompanyRepository;
 import com.dreamteam.safebus.fleet.domain.repository.DriverRepository;
 import com.dreamteam.safebus.fleet.domain.repository.RouteRepository;
 import com.dreamteam.safebus.fleet.domain.repository.ShiftAssignmentRepository;
@@ -32,19 +33,28 @@ public class FleetContextFacade {
                                         String origin, String destination,
                                         Instant plannedStart, Instant plannedEnd) {}
 
+    public record BusInfo(Long busId, Long companyId, boolean enabled) {}
+
+    public record ServiceInfo(String plate, String companyName, boolean companyValidated,
+                              String routeName, String origin, String destination,
+                              String driverPublicName) {}
+
     private final DriverRepository driverRepository;
     private final ShiftAssignmentRepository assignmentRepository;
     private final BusRepository busRepository;
     private final RouteRepository routeRepository;
+    private final CompanyRepository companyRepository;
 
     public FleetContextFacade(DriverRepository driverRepository,
                                ShiftAssignmentRepository assignmentRepository,
                                BusRepository busRepository,
-                               RouteRepository routeRepository) {
+                               RouteRepository routeRepository,
+                               CompanyRepository companyRepository) {
         this.driverRepository = driverRepository;
         this.assignmentRepository = assignmentRepository;
         this.busRepository = busRepository;
         this.routeRepository = routeRepository;
+        this.companyRepository = companyRepository;
     }
 
     public Optional<DriverInfo> findDriverByQrCredential(String qrCredential) {
@@ -77,6 +87,24 @@ public class FleetContextFacade {
     public Optional<Long> findBusCompanyId(Long busId) {
         return busRepository.findById(busId)
             .map(Bus::getCompanyId);
+    }
+
+    public Optional<BusInfo> findBusByQrCode(String qrCode) {
+        return busRepository.findByQrCode(qrCode)
+            .map(b -> new BusInfo(b.getId(), b.getCompanyId(), b.isEnabled()));
+    }
+
+    public Optional<ServiceInfo> describeService(Long busId, Long routeId, Long driverId) {
+        var bus     = busRepository.findById(busId).orElse(null);
+        var route   = routeRepository.findById(routeId).orElse(null);
+        var driver  = driverRepository.findById(driverId).orElse(null);
+        if (bus == null || route == null || driver == null) return Optional.empty();
+        var company = companyRepository.findById(bus.getCompanyId()).orElse(null);
+        if (company == null) return Optional.empty();
+        return Optional.of(new ServiceInfo(
+            bus.getPlate(), company.getName(), company.isValidated(),
+            route.getName(), route.getOrigin(), route.getDestination(),
+            driver.getFullName()));
     }
 
     public Optional<CurrentAssignmentView> findCurrentAssignmentForUserAccount(Long userAccountId,

@@ -69,7 +69,8 @@ public class FleetDevSeeder implements ApplicationRunner {
             company.getId(), driverAccountId, "Demo Driver",
             () -> "DEV-DRIVER-QR-001", Duration.ofDays(365), clock));
 
-        Bus bus = busRepository.save(Bus.create(company.getId(), "ABC-123", qrCodeGenerator));
+        Bus bus = busRepository.save(Bus.create(company.getId(), "ABC-123",
+            () -> "DEV-BUS-QR-001")); // one-off QrCodeGenerator, not the global bean
 
         Route route = routeRepository.save(
             Route.create(company.getId(), "Main Route", "Terminal Norte", "Terminal Sur"));
