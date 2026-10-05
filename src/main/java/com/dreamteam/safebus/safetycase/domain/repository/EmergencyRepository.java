@@ -14,6 +14,8 @@ import java.util.Optional;
 
 public interface EmergencyRepository extends JpaRepository<Emergency, String> {
 
+    List<Emergency> findByBusIdAndShiftIdOrderByReceivedAtDesc(Long busId, Long shiftId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT e FROM Emergency e WHERE e.id = :id")
     Optional<Emergency> findByIdForUpdate(@Param("id") String id);
