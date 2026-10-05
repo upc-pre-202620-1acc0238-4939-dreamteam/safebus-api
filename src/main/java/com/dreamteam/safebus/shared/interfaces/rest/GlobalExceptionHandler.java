@@ -1,6 +1,7 @@
 package com.dreamteam.safebus.shared.interfaces.rest;
 
 import com.dreamteam.safebus.shared.domain.exceptions.ConflictException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import com.dreamteam.safebus.shared.domain.exceptions.ForbiddenOperationException;
 import com.dreamteam.safebus.shared.domain.exceptions.NotFoundException;
 import com.dreamteam.safebus.shared.domain.exceptions.RuleViolationException;
@@ -50,6 +51,14 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleForbiddenOperation(ForbiddenOperationException ex) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
         pd.setProperty("code", ex.code());
+        return pd;
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ProblemDetail handleMaxUploadSize(MaxUploadSizeExceededException ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY,
+            "uploaded file exceeds size limit");
+        pd.setProperty("code", "UPLOAD_TOO_LARGE");
         return pd;
     }
 
