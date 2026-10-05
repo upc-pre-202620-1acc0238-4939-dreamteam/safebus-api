@@ -43,6 +43,8 @@ public class FleetContextFacade {
                               String routeName, String origin, String destination,
                               String driverPublicName) {}
 
+    public record BusSummary(Long busId, String plate, boolean enabled, Integer capacity) {}
+
     private final DriverRepository driverRepository;
     private final ShiftAssignmentRepository assignmentRepository;
     private final BusRepository busRepository;
@@ -148,5 +150,12 @@ public class FleetContextFacade {
                     route.getOrigin(), route.getDestination(),
                     sa.getPlannedStart(), sa.getPlannedEnd());
             });
+    }
+
+    // All buses of the company, enabled or not, ordered by plate
+    public List<BusSummary> listBusesOfCompany(Long companyId) {
+        return busRepository.findByCompanyIdOrderByPlateAsc(companyId).stream()
+            .map(b -> new BusSummary(b.getId(), b.getPlate(), b.isEnabled(), b.getCapacity()))
+            .toList();
     }
 }
