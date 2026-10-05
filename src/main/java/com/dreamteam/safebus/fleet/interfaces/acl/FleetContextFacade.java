@@ -1,0 +1,189 @@
+package com.dreamteam.safebus.fleet.interfaces.acl;
+
+import com.dreamteam.safebus.fleet.domain.model.AssignmentStatus;
+import com.dreamteam.safebus.fleet.domain.model.Bus;
+import com.dreamteam.safebus.fleet.domain.model.ShiftAssignment;
+import com.dreamteam.safebus.fleet.domain.repository.BusRepository;
+import com.dreamteam.safebus.fleet.domain.repository.CompanyRepository;
+import com.dreamteam.safebus.fleet.domain.repository.DriverRepository;
+import com.dreamteam.safebus.fleet.domain.repository.RouteRepository;
+import com.dreamteam.safebus.fleet.domain.repository.ShiftAssignmentRepository;
+import com.dreamteam.safebus.shared.domain.exceptions.ConflictException;
+import com.dreamteam.safebus.shared.domain.exceptions.NotFoundException;
+import com.dreamteam.safebus.shared.domain.exceptions.RuleViolationException;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+@Component
+public class FleetContextFacade {
+
+    public record DriverInfo(Long driverId, Long userAccountId, Long companyId,
+                             boolean enabled, Instant credentialExpiresAt) {}
+
+    public record AssignmentActivationResult(Long assignmentId, Long driverId,
+                                             Long busId, Long routeId) {}
+
+    public record CurrentAssignmentView(Long assignmentId, String status,
+                                        String busPlate, String routeName,
+                                        String origin, String destination,
+                                        Instant plannedStart, Instant plannedEnd) {}
+
+    public record BusInfo(Long busId, Long companyId, boolean enabled) {}
+
+    public record BusCapacityInfo(Long busId, Long companyId, Integer capacity,
+                                  String reference, Instant updatedAt) {}
+
+    public record ServiceInfo(String plate, String companyName, boolean companyValidated,
+                              String routeName, String origin, String destination,
+                              String driverPublicName) {}
+
+    public record BusSummary(Long busId, String plate, boolean enabled, Integer capacity) {}
+
+    public record DriverSummary(Long driverId, String fullName) {}
+
+    public record RouteSummary(Long routeId, String name, String origin, String destination) {}
+
+    private final DriverRepository driverRepository;
+    private final ShiftAssignmentRepository assignmentRepository;
+    private final BusRepository busRepository;
+    private final RouteRepository routeRepository;
+    private final CompanyRepository companyRepository;
+
+    public FleetContextFacade(DriverRepository driverRepository,
+                               ShiftAssignmentRepository assignmentRepository,
+                               BusRepository busRepository,
+                               RouteRepository routeRepository,
+                               CompanyRepository companyRepository) {
+        this.driverRepository = driverRepository;
+        this.assignmentRepository = assignmentRepository;
+        this.busRepository = busRepository;
+        this.routeRepository = routeRepository;
+        this.companyRepository = companyRepository;
+    }
+
+    public Optional<DriverInfo> findDriverByQrCredential(String qrCredential) {
+        return driverRepository.findByQrCredential(qrCredential)
+            .map(d -> new DriverInfo(d.getId(), d.getUserAccountId(), d.getCompanyId(),
+                                     d.isEnabled(), d.getQrCredentialExpiresAt()));
+    }
+
+    // Row lock must be held within the caller's transaction; MANDATORY enforces that.
+    @Transactional(propagation = Propagation.MANDATORY)
+    public AssignmentActivationResult activateAssignment(Long assignmentId, Long driverId) {
+        ShiftAssignment sa = assignmentRepository.findByIdForUpdate(assignmentId)
+            .filter(a -> a.getDriverId().equals(driverId))
+            .orElseThrow(() -> new RuleViolationException("ASSIGNMENT_NOT_FOUND", "assignment not found"));
+        if (sa.getStatus() != AssignmentStatus.ASSIGNED) {
+            throw new ConflictException("ASSIGNMENT_NOT_AVAILABLE", "assignment is not in ASSIGNED status");
+        }
+        sa.activate();
+        assignmentRepository.save(sa);
+        return new AssignmentActivationResult(sa.getId(), sa.getDriverId(),
+                                              sa.getBusId(), sa.getRouteId());
+    }
+
+    // Takes the row lock before reading, inside the caller's transaction; closing an already CLOSED assignment is a no-op.
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void closeAssignment(Long assignmentId) {
+        ShiftAssignment sa = assignmentRepository.findByIdForUpdate(assignmentId)
+            .orElseThrow(() -> new NotFoundException("ASSIGNMENT_NOT_FOUND", "assignment not found"));
+        if (sa.close()) {
+            assignmentRepository.save(sa);
+        }
+    }
+
+    public Optional<DriverInfo> findDriverByUserAccountId(Long userAccountId) {
+        return driverRepository.findByUserAccountId(userAccountId)
+            .map(d -> new DriverInfo(d.getId(), d.getUserAccountId(), d.getCompanyId(),
+                                     d.isEnabled(), d.getQrCredentialExpiresAt()));
+    }
+
+    public Optional<Long> findBusCompanyId(Long busId) {
+        return busRepository.findById(busId)
+            .map(Bus::getCompanyId);
+    }
+
+    public Optional<BusCapacityInfo> findBusCapacity(Long busId) {
+        return busRepository.findById(busId)
+            .map(b -> new BusCapacityInfo(b.getId(), b.getCompanyId(), b.getCapacity(),
+                b.getCapacityReference(), b.getCapacityUpdatedAt()));
+    }
+
+    public Optional<BusInfo> findBusByQrCode(String qrCode) {
+        return busRepository.findByQrCode(qrCode)
+            .map(b -> new BusInfo(b.getId(), b.getCompanyId(), b.isEnabled()));
+    }
+
+    public Optional<ServiceInfo> describeService(Long busId, Long routeId, Long driverId) {
+        var bus     = busRepository.findById(busId).orElse(null);
+        var route   = routeRepository.findById(routeId).orElse(null);
+        var driver  = driverRepository.findById(driverId).orElse(null);
+        if (bus == null || route == null || driver == null) return Optional.empty();
+        var company = companyRepository.findById(bus.getCompanyId()).orElse(null);
+        if (company == null) return Optional.empty();
+        return Optional.of(new ServiceInfo(
+            bus.getPlate(), company.getName(), company.isValidated(),
+            route.getName(), route.getOrigin(), route.getDestination(),
+            driver.getFullName()));
+    }
+
+    public Optional<CurrentAssignmentView> findCurrentAssignmentForUserAccount(Long userAccountId,
+                                                                                Instant now) {
+        return driverRepository.findByUserAccountId(userAccountId)
+            .flatMap(driver -> {
+                List<ShiftAssignment> candidates =
+                    assignmentRepository.findCurrentCandidatesForDriver(driver.getId(), now);
+                return candidates.stream()
+                    .min(Comparator
+                        .comparingInt((ShiftAssignment sa) ->
+                            sa.getStatus() == AssignmentStatus.ACTIVE ? 0 : 1)
+                        .thenComparing(ShiftAssignment::getPlannedStart));
+            })
+            .map(sa -> {
+                var bus = busRepository.findById(sa.getBusId()).orElseThrow();
+                var route = routeRepository.findById(sa.getRouteId()).orElseThrow();
+                return new CurrentAssignmentView(
+                    sa.getId(), sa.getStatus().name(),
+                    bus.getPlate(), route.getName(),
+                    route.getOrigin(), route.getDestination(),
+                    sa.getPlannedStart(), sa.getPlannedEnd());
+            });
+    }
+
+    // All buses of the company, enabled or not, ordered by plate
+    public List<BusSummary> listBusesOfCompany(Long companyId) {
+        return busRepository.findByCompanyIdOrderByPlateAsc(companyId).stream()
+            .map(b -> new BusSummary(b.getId(), b.getPlate(), b.isEnabled(), b.getCapacity()))
+            .toList();
+    }
+
+    // Unknown ids are absent from the result; an empty or null collection does not query
+    public Map<Long, DriverSummary> findDriversByIds(Collection<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Map.of();
+        }
+        return driverRepository.findAllById(ids).stream()
+            .collect(Collectors.toUnmodifiableMap(
+                d -> d.getId(), d -> new DriverSummary(d.getId(), d.getFullName())));
+    }
+
+    // Unknown ids are absent from the result; an empty or null collection does not query
+    public Map<Long, RouteSummary> findRoutesByIds(Collection<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Map.of();
+        }
+        return routeRepository.findAllById(ids).stream()
+            .collect(Collectors.toUnmodifiableMap(
+                r -> r.getId(),
+                r -> new RouteSummary(r.getId(), r.getName(), r.getOrigin(), r.getDestination())));
+    }
+}
