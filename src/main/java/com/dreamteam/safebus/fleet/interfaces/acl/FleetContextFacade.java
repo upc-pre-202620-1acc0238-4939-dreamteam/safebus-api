@@ -1,6 +1,7 @@
 package com.dreamteam.safebus.fleet.interfaces.acl;
 
 import com.dreamteam.safebus.fleet.domain.model.AssignmentStatus;
+import com.dreamteam.safebus.fleet.domain.model.Bus;
 import com.dreamteam.safebus.fleet.domain.model.ShiftAssignment;
 import com.dreamteam.safebus.fleet.domain.repository.BusRepository;
 import com.dreamteam.safebus.fleet.domain.repository.DriverRepository;
@@ -65,6 +66,17 @@ public class FleetContextFacade {
         assignmentRepository.save(sa);
         return new AssignmentActivationResult(sa.getId(), sa.getDriverId(),
                                               sa.getBusId(), sa.getRouteId());
+    }
+
+    public Optional<DriverInfo> findDriverByUserAccountId(Long userAccountId) {
+        return driverRepository.findByUserAccountId(userAccountId)
+            .map(d -> new DriverInfo(d.getId(), d.getUserAccountId(), d.getCompanyId(),
+                                     d.isEnabled(), d.getQrCredentialExpiresAt()));
+    }
+
+    public Optional<Long> findBusCompanyId(Long busId) {
+        return busRepository.findById(busId)
+            .map(Bus::getCompanyId);
     }
 
     public Optional<CurrentAssignmentView> findCurrentAssignmentForUserAccount(Long userAccountId,
