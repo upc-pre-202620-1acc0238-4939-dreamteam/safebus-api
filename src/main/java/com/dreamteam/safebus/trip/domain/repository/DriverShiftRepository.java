@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface DriverShiftRepository extends JpaRepository<DriverShift, Long> {
@@ -17,4 +19,6 @@ public interface DriverShiftRepository extends JpaRepository<DriverShift, Long> 
     Optional<DriverShift> findByIdForUpdate(@Param("id") Long id);
 
     Optional<DriverShift> findTopByBusIdAndStatusOrderByStartedAtDesc(Long busId, ShiftStatus status);
+
+    List<DriverShift> findByBusIdInAndStatus(Collection<Long> busIds, ShiftStatus status);
 }
