@@ -178,6 +178,12 @@ class BusCapacityControllerTest {
         assertRejected(body, "INVALID_CAPACITY", "capacity");
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"12.0000000000000000001", "2147483647.0000000001"})
+    void update_highPrecisionFractionReturns422WithoutParserRounding(String value) throws Exception {
+        assertInvalidCapacity(new BigDecimal(value));
+    }
+
     @Test
     void s2_missingCapacityReturns422AndPreservesLastValidCapacity() throws Exception {
         Map<String, Object> body = validBody();
