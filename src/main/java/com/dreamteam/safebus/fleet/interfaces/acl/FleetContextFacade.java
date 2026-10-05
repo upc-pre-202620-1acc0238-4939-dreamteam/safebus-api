@@ -36,6 +36,9 @@ public class FleetContextFacade {
 
     public record BusInfo(Long busId, Long companyId, boolean enabled) {}
 
+    public record BusCapacityInfo(Long busId, Long companyId, Integer capacity,
+                                  String reference, Instant updatedAt) {}
+
     public record ServiceInfo(String plate, String companyName, boolean companyValidated,
                               String routeName, String origin, String destination,
                               String driverPublicName) {}
@@ -98,6 +101,12 @@ public class FleetContextFacade {
     public Optional<Long> findBusCompanyId(Long busId) {
         return busRepository.findById(busId)
             .map(Bus::getCompanyId);
+    }
+
+    public Optional<BusCapacityInfo> findBusCapacity(Long busId) {
+        return busRepository.findById(busId)
+            .map(b -> new BusCapacityInfo(b.getId(), b.getCompanyId(), b.getCapacity(),
+                b.getCapacityReference(), b.getCapacityUpdatedAt()));
     }
 
     public Optional<BusInfo> findBusByQrCode(String qrCode) {
