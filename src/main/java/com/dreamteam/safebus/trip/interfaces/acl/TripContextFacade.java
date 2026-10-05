@@ -23,7 +23,7 @@ public class TripContextFacade {
                                     s.getRouteId(), s.getStatus().name()));
     }
 
-    // provisional rule: shifts are not closed until US05; returns the latest ACTIVE shift for the bus
+    // returns the latest ACTIVE shift for the bus; a CLOSED shift is never returned
     public Optional<ShiftInfo> findActiveShiftByBusId(Long busId) {
         return driverShiftRepository.findTopByBusIdAndStatusOrderByStartedAtDesc(busId, ShiftStatus.ACTIVE)
             .map(s -> new ShiftInfo(s.getId(), s.getDriverId(), s.getBusId(),
