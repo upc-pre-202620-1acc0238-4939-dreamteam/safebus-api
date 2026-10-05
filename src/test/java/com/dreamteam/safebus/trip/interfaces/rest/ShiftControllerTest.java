@@ -147,16 +147,16 @@ class ShiftControllerTest {
     }
 
     @Test
-    void activate_assignmentNotFound_returns404() throws Exception {
+    void activate_assignmentNotFound_returns422AssignmentNotFound() throws Exception {
         mockMvc.perform(post(ACTIVATE_URL).with(driverJwt(500L))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"assignmentId\":999999,\"qrCredential\":\"SHFT-DRV-QR-001\"}"))
-            .andExpect(status().isNotFound())
+            .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("ASSIGNMENT_NOT_FOUND"));
     }
 
     @Test
-    void activate_assignmentOfAnotherDriver_returns404SameBodyAsNotFound() throws Exception {
+    void activate_assignmentOfAnotherDriver_returns422SameBodyAsNotFound() throws Exception {
         ShiftAssignment otherSa = assignedShift(otherDriver);
         String bodyOther = String.format(
             "{\"assignmentId\":%d,\"qrCredential\":\"SHFT-DRV-QR-001\"}", otherSa.getId());
@@ -165,11 +165,11 @@ class ShiftControllerTest {
 
         var fromOther = mockMvc.perform(post(ACTIVATE_URL).with(driverJwt(500L))
                 .contentType(MediaType.APPLICATION_JSON).content(bodyOther))
-            .andExpect(status().isNotFound())
+            .andExpect(status().isUnprocessableEntity())
             .andReturn();
         var fromMissing = mockMvc.perform(post(ACTIVATE_URL).with(driverJwt(500L))
                 .contentType(MediaType.APPLICATION_JSON).content(bodyMissing))
-            .andExpect(status().isNotFound())
+            .andExpect(status().isUnprocessableEntity())
             .andReturn();
 
         String bodyOtherStr = fromOther.getResponse().getContentAsString();
@@ -178,7 +178,7 @@ class ShiftControllerTest {
     }
 
     @Test
-    void activate_alreadyActive_returns409ShiftAlreadyActive() throws Exception {
+    void activate_alreadyActive_returns409AssignmentNotAvailable() throws Exception {
         ShiftAssignment sa = assignedShift(driver);
         String body = String.format("{\"assignmentId\":%d,\"qrCredential\":\"SHFT-DRV-QR-001\"}", sa.getId());
 
@@ -189,7 +189,22 @@ class ShiftControllerTest {
         mockMvc.perform(post(ACTIVATE_URL).with(driverJwt(500L))
                 .contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(status().isConflict())
-            .andExpect(jsonPath("$.code").value("SHIFT_ALREADY_ACTIVE"));
+            .andExpect(jsonPath("$.code").value("ASSIGNMENT_NOT_AVAILABLE"));
+    }
+
+    @Test
+    void activate_alreadyClosed_returns409AssignmentNotAvailable() throws Exception {
+        ShiftAssignment sa = assignedShift(driver);
+        java.lang.reflect.Field f = ShiftAssignment.class.getDeclaredField("status");
+        f.setAccessible(true);
+        f.set(sa, com.dreamteam.safebus.fleet.domain.model.AssignmentStatus.CLOSED);
+        assignmentRepository.save(sa);
+        String body = String.format("{\"assignmentId\":%d,\"qrCredential\":\"SHFT-DRV-QR-001\"}", sa.getId());
+
+        mockMvc.perform(post(ACTIVATE_URL).with(driverJwt(500L))
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("ASSIGNMENT_NOT_AVAILABLE"));
     }
 
     @Test

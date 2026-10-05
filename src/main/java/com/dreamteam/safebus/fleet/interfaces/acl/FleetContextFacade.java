@@ -7,7 +7,6 @@ import com.dreamteam.safebus.fleet.domain.repository.DriverRepository;
 import com.dreamteam.safebus.fleet.domain.repository.RouteRepository;
 import com.dreamteam.safebus.fleet.domain.repository.ShiftAssignmentRepository;
 import com.dreamteam.safebus.shared.domain.exceptions.ConflictException;
-import com.dreamteam.safebus.shared.domain.exceptions.NotFoundException;
 import com.dreamteam.safebus.shared.domain.exceptions.RuleViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -58,16 +57,11 @@ public class FleetContextFacade {
     public AssignmentActivationResult activateAssignment(Long assignmentId, Long driverId) {
         ShiftAssignment sa = assignmentRepository.findByIdForUpdate(assignmentId)
             .filter(a -> a.getDriverId().equals(driverId))
-            .orElseThrow(() -> new NotFoundException("ASSIGNMENT_NOT_FOUND", "assignment not found"));
-        try {
-            sa.activate();
-        } catch (RuleViolationException e) {
-            if ("ASSIGNMENT_NOT_AVAILABLE".equals(e.code())) {
-                throw new ConflictException("SHIFT_ALREADY_ACTIVE",
-                    "assignment is not available for activation");
-            }
-            throw e;
+            .orElseThrow(() -> new RuleViolationException("ASSIGNMENT_NOT_FOUND", "assignment not found"));
+        if (sa.getStatus() != AssignmentStatus.ASSIGNED) {
+            throw new ConflictException("ASSIGNMENT_NOT_AVAILABLE", "assignment is not in ASSIGNED status");
         }
+        sa.activate();
         assignmentRepository.save(sa);
         return new AssignmentActivationResult(sa.getId(), sa.getDriverId(),
                                               sa.getBusId(), sa.getRouteId());

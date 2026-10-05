@@ -180,7 +180,7 @@ class ActivateShiftCommandServiceTest {
 
         long before = driverShiftRepository.count();
 
-        NotFoundException ex = assertThrows(NotFoundException.class,
+        RuleViolationException ex = assertThrows(RuleViolationException.class,
             () -> service.activate(new ActivateShiftCommand(999999L, "AS-QR-005")));
 
         assertEquals("ASSIGNMENT_NOT_FOUND", ex.code());
@@ -196,9 +196,9 @@ class ActivateShiftCommandServiceTest {
 
         long before = driverShiftRepository.count();
 
-        NotFoundException fromOtherDriver = assertThrows(NotFoundException.class,
+        RuleViolationException fromOtherDriver = assertThrows(RuleViolationException.class,
             () -> service.activate(new ActivateShiftCommand(d2sa.getId(), "AS-QR-006")));
-        NotFoundException fromMissing = assertThrows(NotFoundException.class,
+        RuleViolationException fromMissing = assertThrows(RuleViolationException.class,
             () -> service.activate(new ActivateShiftCommand(999999L, "AS-QR-006")));
 
         assertEquals(fromMissing.code(), fromOtherDriver.code());
@@ -222,7 +222,36 @@ class ActivateShiftCommandServiceTest {
         ConflictException ex = assertThrows(ConflictException.class,
             () -> service.activate(new ActivateShiftCommand(sa.getId(), "AS-QR-008")));
 
-        assertEquals("SHIFT_ALREADY_ACTIVE", ex.code());
+        assertEquals("ASSIGNMENT_NOT_AVAILABLE", ex.code());
         assertEquals(afterFirst, driverShiftRepository.count());
+        ShiftAssignment reloaded = assignmentRepository.findById(sa.getId()).orElseThrow();
+        assertEquals(com.dreamteam.safebus.fleet.domain.model.AssignmentStatus.ACTIVE,
+            reloaded.getStatus());
+    }
+
+    @Test
+    void activate_assignmentAlreadyClosed_throwsConflictAndNoDriverShift() {
+        Driver d = validDriver(308L, "AS-QR-009");
+        ShiftAssignment sa = assignedShift(d);
+        try {
+            java.lang.reflect.Field f = ShiftAssignment.class.getDeclaredField("status");
+            f.setAccessible(true);
+            f.set(sa, com.dreamteam.safebus.fleet.domain.model.AssignmentStatus.CLOSED);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        assignmentRepository.save(sa);
+        mockUser(308L);
+
+        long before = driverShiftRepository.count();
+
+        ConflictException ex = assertThrows(ConflictException.class,
+            () -> service.activate(new ActivateShiftCommand(sa.getId(), "AS-QR-009")));
+
+        assertEquals("ASSIGNMENT_NOT_AVAILABLE", ex.code());
+        assertEquals(before, driverShiftRepository.count());
+        ShiftAssignment unchanged = assignmentRepository.findById(sa.getId()).orElseThrow();
+        assertEquals(com.dreamteam.safebus.fleet.domain.model.AssignmentStatus.CLOSED,
+            unchanged.getStatus());
     }
 }

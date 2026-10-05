@@ -10,8 +10,9 @@ import com.dreamteam.safebus.fleet.domain.repository.CompanyRepository;
 import com.dreamteam.safebus.fleet.domain.repository.DriverRepository;
 import com.dreamteam.safebus.fleet.domain.repository.RouteRepository;
 import com.dreamteam.safebus.fleet.domain.repository.ShiftAssignmentRepository;
+import com.dreamteam.safebus.fleet.domain.model.AssignmentStatus;
 import com.dreamteam.safebus.shared.domain.exceptions.ConflictException;
-import com.dreamteam.safebus.shared.domain.exceptions.NotFoundException;
+import com.dreamteam.safebus.shared.domain.exceptions.RuleViolationException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -83,7 +84,7 @@ class FleetContextFacadeActivateTest {
     @Test
     @Transactional
     void activateAssignment_notFound_throwsAssignmentNotFound() {
-        NotFoundException ex = assertThrows(NotFoundException.class,
+        RuleViolationException ex = assertThrows(RuleViolationException.class,
             () -> facade.activateAssignment(999999L, driver.getId()));
         assertEquals("ASSIGNMENT_NOT_FOUND", ex.code());
     }
@@ -94,9 +95,9 @@ class FleetContextFacadeActivateTest {
         ShiftAssignment sa = assignmentRepository.save(ShiftAssignment.create(
             driver.getId(), bus.getId(), route.getId(), T1, T2, 100L, clock));
 
-        NotFoundException fromWrongDriver = assertThrows(NotFoundException.class,
+        RuleViolationException fromWrongDriver = assertThrows(RuleViolationException.class,
             () -> facade.activateAssignment(sa.getId(), driver.getId() + 999));
-        NotFoundException fromMissing = assertThrows(NotFoundException.class,
+        RuleViolationException fromMissing = assertThrows(RuleViolationException.class,
             () -> facade.activateAssignment(999999L, driver.getId()));
 
         assertEquals(fromMissing.code(), fromWrongDriver.code());
@@ -105,7 +106,7 @@ class FleetContextFacadeActivateTest {
 
     @Test
     @Transactional
-    void activateAssignment_alreadyActive_throwsConflictException() {
+    void activateAssignment_alreadyActive_throwsConflictAssignmentNotAvailable() {
         ShiftAssignment sa = assignmentRepository.save(ShiftAssignment.create(
             driver.getId(), bus.getId(), route.getId(), T1, T2, 100L, clock));
         sa.activate();
@@ -113,7 +114,26 @@ class FleetContextFacadeActivateTest {
 
         ConflictException ex = assertThrows(ConflictException.class,
             () -> facade.activateAssignment(sa.getId(), driver.getId()));
-        assertEquals("SHIFT_ALREADY_ACTIVE", ex.code());
+        assertEquals("ASSIGNMENT_NOT_AVAILABLE", ex.code());
+    }
+
+    @Test
+    @Transactional
+    void activateAssignment_alreadyClosed_throwsConflictAssignmentNotAvailable() {
+        ShiftAssignment sa = assignmentRepository.save(ShiftAssignment.create(
+            driver.getId(), bus.getId(), route.getId(), T1, T2, 100L, clock));
+        try {
+            java.lang.reflect.Field f = ShiftAssignment.class.getDeclaredField("status");
+            f.setAccessible(true);
+            f.set(sa, AssignmentStatus.CLOSED);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        assignmentRepository.save(sa);
+
+        ConflictException ex = assertThrows(ConflictException.class,
+            () -> facade.activateAssignment(sa.getId(), driver.getId()));
+        assertEquals("ASSIGNMENT_NOT_AVAILABLE", ex.code());
     }
 
     @Test
