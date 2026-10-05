@@ -16,9 +16,12 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Component
 public class FleetContextFacade {
@@ -44,6 +47,10 @@ public class FleetContextFacade {
                               String driverPublicName) {}
 
     public record BusSummary(Long busId, String plate, boolean enabled, Integer capacity) {}
+
+    public record DriverSummary(Long driverId, String fullName) {}
+
+    public record RouteSummary(Long routeId, String name, String origin, String destination) {}
 
     private final DriverRepository driverRepository;
     private final ShiftAssignmentRepository assignmentRepository;
@@ -157,5 +164,26 @@ public class FleetContextFacade {
         return busRepository.findByCompanyIdOrderByPlateAsc(companyId).stream()
             .map(b -> new BusSummary(b.getId(), b.getPlate(), b.isEnabled(), b.getCapacity()))
             .toList();
+    }
+
+    // Unknown ids are absent from the result; an empty or null collection does not query
+    public Map<Long, DriverSummary> findDriversByIds(Collection<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Map.of();
+        }
+        return driverRepository.findAllById(ids).stream()
+            .collect(Collectors.toUnmodifiableMap(
+                d -> d.getId(), d -> new DriverSummary(d.getId(), d.getFullName())));
+    }
+
+    // Unknown ids are absent from the result; an empty or null collection does not query
+    public Map<Long, RouteSummary> findRoutesByIds(Collection<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Map.of();
+        }
+        return routeRepository.findAllById(ids).stream()
+            .collect(Collectors.toUnmodifiableMap(
+                r -> r.getId(),
+                r -> new RouteSummary(r.getId(), r.getName(), r.getOrigin(), r.getDestination())));
     }
 }
