@@ -1,5 +1,6 @@
 package com.dreamteam.safebus.fleet.domain.model;
 
+import com.dreamteam.safebus.shared.domain.exceptions.ConflictException;
 import com.dreamteam.safebus.shared.domain.exceptions.RuleViolationException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -74,6 +75,18 @@ public class ShiftAssignment {
                 "assignment is not in ASSIGNED status");
         }
         this.status = AssignmentStatus.ACTIVE;
+    }
+
+    public boolean close() {
+        if (this.status == AssignmentStatus.CLOSED) {
+            return false;
+        }
+        if (this.status != AssignmentStatus.ACTIVE) {
+            throw new ConflictException("ASSIGNMENT_NOT_ACTIVE",
+                "assignment must be ACTIVE to be closed");
+        }
+        this.status = AssignmentStatus.CLOSED;
+        return true;
     }
 
     public static boolean overlaps(Instant startA, Instant endA, Instant startB, Instant endB) {

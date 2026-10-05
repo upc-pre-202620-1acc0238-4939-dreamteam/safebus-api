@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface PassengerJourneyRepository extends JpaRepository<PassengerJourney, Long> {
@@ -19,4 +20,8 @@ public interface PassengerJourneyRepository extends JpaRepository<PassengerJourn
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT pj FROM PassengerJourney pj WHERE pj.id = :id")
     Optional<PassengerJourney> findByIdForUpdate(@Param("id") Long id);
+
+    // Locked so a passenger ending the same journey at the same time is not overwritten.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    List<PassengerJourney> findByShiftIdAndStatus(Long shiftId, JourneyStatus status);
 }

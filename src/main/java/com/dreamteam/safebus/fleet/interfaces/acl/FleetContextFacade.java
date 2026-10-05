@@ -9,6 +9,7 @@ import com.dreamteam.safebus.fleet.domain.repository.DriverRepository;
 import com.dreamteam.safebus.fleet.domain.repository.RouteRepository;
 import com.dreamteam.safebus.fleet.domain.repository.ShiftAssignmentRepository;
 import com.dreamteam.safebus.shared.domain.exceptions.ConflictException;
+import com.dreamteam.safebus.shared.domain.exceptions.NotFoundException;
 import com.dreamteam.safebus.shared.domain.exceptions.RuleViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -76,6 +77,16 @@ public class FleetContextFacade {
         assignmentRepository.save(sa);
         return new AssignmentActivationResult(sa.getId(), sa.getDriverId(),
                                               sa.getBusId(), sa.getRouteId());
+    }
+
+    // Takes the row lock before reading, inside the caller's transaction; closing an already CLOSED assignment is a no-op.
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void closeAssignment(Long assignmentId) {
+        ShiftAssignment sa = assignmentRepository.findByIdForUpdate(assignmentId)
+            .orElseThrow(() -> new NotFoundException("ASSIGNMENT_NOT_FOUND", "assignment not found"));
+        if (sa.close()) {
+            assignmentRepository.save(sa);
+        }
     }
 
     public Optional<DriverInfo> findDriverByUserAccountId(Long userAccountId) {
