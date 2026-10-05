@@ -67,7 +67,7 @@ public class LocationEvent {
     }
 
     // Called once by the writer after applyIfNewer determines the value
-    void markAppliedAsCurrent() {
+    public void markAppliedAsCurrent() {
         this.appliedAsCurrent = true;
     }
 
