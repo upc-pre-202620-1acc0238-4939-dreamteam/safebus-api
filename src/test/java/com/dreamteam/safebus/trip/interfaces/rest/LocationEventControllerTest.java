@@ -421,6 +421,7 @@ class LocationEventControllerTest {
             .andExpect(status().isForbidden())
             .andReturn();
 
+        // Both use the same URL (/api/v1/location-events), so instance matches and bodies are byte-identical
         assertEquals(fromMissing.getResponse().getContentAsString(),
                      fromAnother.getResponse().getContentAsString());
         assertEquals(0L, locationEventRepository.count());
