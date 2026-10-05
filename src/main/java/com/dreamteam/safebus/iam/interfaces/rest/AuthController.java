@@ -6,6 +6,7 @@ import com.dreamteam.safebus.iam.application.SignInResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -29,6 +30,7 @@ public class AuthController {
     @ApiResponse(responseCode = "200", description = "Authenticated successfully")
     @ApiResponse(responseCode = "401", description = "Invalid credentials")
     @ApiResponse(responseCode = "422", description = "Validation failed")
+    @SecurityRequirements
     @PostMapping("/sign-in")
     public ResponseEntity<SignInResponse> signIn(@Valid @RequestBody SignInRequest request) {
         SignInResult result = signInService.signIn(new SignInCommand(request.loginId(), request.password()));
