@@ -54,7 +54,10 @@ public class StartJourneyWriterImpl implements StartJourneyWriter {
         if (existing.isPresent()) {
             PassengerJourney activeJourney = existing.get();
             if (activeJourney.getBusId().equals(bus.busId())) {
-                return new StartJourneyResult(activeJourney.getId(), false);
+                FleetContextFacade.ServiceInfo si = serviceInfo(bus, shift);
+                return new StartJourneyResult(activeJourney.getId(), false,
+                    si.plate(), si.companyName(), si.companyValidated(),
+                    si.routeName(), si.origin(), si.destination(), si.driverPublicName());
             }
             throw new ConflictException("ACTIVE_JOURNEY_EXISTS",
                 "passenger already has an active journey on a different bus");
@@ -63,6 +66,15 @@ public class StartJourneyWriterImpl implements StartJourneyWriter {
         PassengerJourney journey = PassengerJourney.start(
             cmd.userAccountId(), bus.busId(), shift.shiftId(), clock);
         journeyRepository.saveAndFlush(journey);
-        return new StartJourneyResult(journey.getId(), true);
+        FleetContextFacade.ServiceInfo si = serviceInfo(bus, shift);
+        return new StartJourneyResult(journey.getId(), true,
+            si.plate(), si.companyName(), si.companyValidated(),
+            si.routeName(), si.origin(), si.destination(), si.driverPublicName());
+    }
+
+    private FleetContextFacade.ServiceInfo serviceInfo(
+            FleetContextFacade.BusInfo bus, TripContextFacade.ShiftInfo shift) {
+        return fleetFacade.describeService(bus.busId(), shift.routeId(), shift.driverId())
+            .orElseThrow(() -> new RuleViolationException("BUS_NOT_IN_SERVICE", "service info unavailable"));
     }
 }

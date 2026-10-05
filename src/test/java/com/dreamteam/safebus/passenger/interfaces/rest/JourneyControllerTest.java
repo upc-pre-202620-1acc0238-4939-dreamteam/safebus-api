@@ -103,7 +103,14 @@ class JourneyControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"busQrCode\":\"JCT-QR-001\"}"))
             .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.id").isNumber());
+            .andExpect(jsonPath("$.id").isNumber())
+            .andExpect(jsonPath("$.plate").value("JCT-BUS01"))
+            .andExpect(jsonPath("$.companyName").value("Journey Test Co"))
+            .andExpect(jsonPath("$.companyValidated").value(true))
+            .andExpect(jsonPath("$.routeName").value("JCT Route"))
+            .andExpect(jsonPath("$.origin").value("X"))
+            .andExpect(jsonPath("$.destination").value("Y"))
+            .andExpect(jsonPath("$.driverPublicName").value("JCT Driver"));
     }
 
     @Test
@@ -113,6 +120,7 @@ class JourneyControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"busQrCode\":\"JCT-QR-001\"}"))
             .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.plate").value("JCT-BUS01"))
             .andReturn();
 
         String firstBody = first.getResponse().getContentAsString();
@@ -122,6 +130,7 @@ class JourneyControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"busQrCode\":\"JCT-QR-001\"}"))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.plate").value("JCT-BUS01"))
             .andReturn();
 
         assertEquals(firstBody, second.getResponse().getContentAsString());
@@ -200,7 +209,9 @@ class JourneyControllerTest {
             .andReturn();
 
         String journeyBody = startResult.getResponse().getContentAsString();
-        long journeyId = Long.parseLong(journeyBody.replaceAll("[^0-9]", ""));
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"id\":(\\d+)").matcher(journeyBody);
+        m.find();
+        long journeyId = Long.parseLong(m.group(1));
 
         mockMvc.perform(post(JOURNEYS_URL + "/" + journeyId + "/end")
                 .with(passengerJwt(PASSENGER_USER_ID))

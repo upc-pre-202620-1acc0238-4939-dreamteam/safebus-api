@@ -49,7 +49,10 @@ public class JourneyController {
         Long userId = currentUserProvider.current().userId();
         StartJourneyResult result = startService.start(new StartJourneyCommand(userId, request.busQrCode()));
         HttpStatus status = result.created() ? HttpStatus.CREATED : HttpStatus.OK;
-        return ResponseEntity.status(status).body(new JourneyResource(result.journeyId()));
+        return ResponseEntity.status(status).body(new JourneyResource(
+            result.journeyId(),
+            result.plate(), result.companyName(), result.companyValidated(),
+            result.routeName(), result.origin(), result.destination(), result.driverPublicName()));
     }
 
     @PostMapping("/{id}/end")

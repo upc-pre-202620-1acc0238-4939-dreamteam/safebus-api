@@ -47,10 +47,15 @@ class StartJourneyWriterTest {
         when(journeyRepository.findByUserAccountIdAndStatus(99L, JourneyStatus.ACTIVE))
             .thenReturn(Optional.empty());
         when(journeyRepository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(fleetFacade.describeService(10L, 3L, 5L)).thenReturn(Optional.of(
+            new FleetContextFacade.ServiceInfo("PLATE-1", "Co", true, "Route A", "X", "Y", "Bob")));
 
         StartJourneyResult result = writer.write(new StartJourneyCommand(99L, "QR-001"));
 
         assertTrue(result.created());
+        assertEquals("PLATE-1", result.plate());
+        assertEquals("Co", result.companyName());
+        assertEquals("Route A", result.routeName());
         verify(journeyRepository).saveAndFlush(any(PassengerJourney.class));
     }
 
@@ -63,10 +68,14 @@ class StartJourneyWriterTest {
             .thenReturn(Optional.of(new TripContextFacade.ShiftInfo(20L, 5L, 10L, 3L, "ACTIVE")));
         when(journeyRepository.findByUserAccountIdAndStatus(99L, JourneyStatus.ACTIVE))
             .thenReturn(Optional.of(existing));
+        when(fleetFacade.describeService(10L, 3L, 5L)).thenReturn(Optional.of(
+            new FleetContextFacade.ServiceInfo("PLATE-1", "Co", true, "Route A", "X", "Y", "Bob")));
 
         StartJourneyResult result = writer.write(new StartJourneyCommand(99L, "QR-001"));
 
         assertFalse(result.created());
+        assertEquals("PLATE-1", result.plate());
+        assertEquals("Route A", result.routeName());
         verify(journeyRepository, never()).saveAndFlush(any());
     }
 
