@@ -276,4 +276,54 @@ class JourneyControllerTest {
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("INVALID_END_REASON"));
     }
+
+    // --- optional bodies ---
+
+    private long seedActiveJourney() {
+        return journeyRepository.saveAndFlush(
+            PassengerJourney.start(PASSENGER_USER_ID, bus.getId(), shift.getId(), clock)).getId();
+    }
+
+    private void assertEndedWithManual(long journeyId, org.springframework.test.web.servlet.ResultActions result)
+            throws Exception {
+        result.andExpect(status().isOk())
+            .andExpect(jsonPath("$.journeyId").value(journeyId))
+            .andExpect(jsonPath("$.status").value("ENDED"))
+            .andExpect(jsonPath("$.endReason").value("MANUAL"));
+        assertEquals(JourneyEndReason.MANUAL, journeyRepository.findById(journeyId).orElseThrow().getEndReason());
+    }
+
+    @Test
+    void end_noBody_endsWithManual() throws Exception {
+        long id = seedActiveJourney();
+        assertEndedWithManual(id, mockMvc.perform(post(JOURNEYS_URL + "/" + id + "/end")
+            .with(passengerJwt(PASSENGER_USER_ID))));
+    }
+
+    @Test
+    void end_emptyJsonObject_endsWithManual() throws Exception {
+        long id = seedActiveJourney();
+        assertEndedWithManual(id, mockMvc.perform(post(JOURNEYS_URL + "/" + id + "/end")
+            .with(passengerJwt(PASSENGER_USER_ID))
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{}")));
+    }
+
+    @Test
+    void end_nullReason_endsWithManual() throws Exception {
+        long id = seedActiveJourney();
+        assertEndedWithManual(id, mockMvc.perform(post(JOURNEYS_URL + "/" + id + "/end")
+            .with(passengerJwt(PASSENGER_USER_ID))
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"reason\":null}")));
+    }
+
+    @Test
+    void start_noBody_returns422BusQrInvalid() throws Exception {
+        mockMvc.perform(post(JOURNEYS_URL)
+                .with(passengerJwt(PASSENGER_USER_ID)))
+            .andExpect(status().isUnprocessableEntity())
+            .andExpect(jsonPath("$.code").value("BUS_QR_INVALID"));
+        assertEquals(0, journeyRepository.count());
+    }
 }
