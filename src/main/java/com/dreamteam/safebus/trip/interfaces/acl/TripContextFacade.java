@@ -1,5 +1,6 @@
 package com.dreamteam.safebus.trip.interfaces.acl;
 
+import com.dreamteam.safebus.trip.domain.model.ShiftStatus;
 import com.dreamteam.safebus.trip.domain.repository.DriverShiftRepository;
 import org.springframework.stereotype.Component;
 
@@ -18,6 +19,13 @@ public class TripContextFacade {
 
     public Optional<ShiftInfo> findShiftById(Long shiftId) {
         return driverShiftRepository.findById(shiftId)
+            .map(s -> new ShiftInfo(s.getId(), s.getDriverId(), s.getBusId(),
+                                    s.getRouteId(), s.getStatus().name()));
+    }
+
+    // provisional rule: shifts are not closed until US05; returns the latest ACTIVE shift for the bus
+    public Optional<ShiftInfo> findActiveShiftByBusId(Long busId) {
+        return driverShiftRepository.findTopByBusIdAndStatusOrderByStartedAtDesc(busId, ShiftStatus.ACTIVE)
             .map(s -> new ShiftInfo(s.getId(), s.getDriverId(), s.getBusId(),
                                     s.getRouteId(), s.getStatus().name()));
     }
