@@ -53,6 +53,9 @@ class StartJourneyWriterTest {
         StartJourneyResult result = writer.write(new StartJourneyCommand(99L, "QR-001"));
 
         assertTrue(result.created());
+        assertEquals(JourneyStatus.ACTIVE, result.status());
+        assertEquals(Instant.parse("2026-01-01T12:00:00Z"), result.startedAt());
+        assertTrue(result.companyValidated());
         assertEquals("PLATE-1", result.plate());
         assertEquals("Co", result.companyName());
         assertEquals("Route A", result.routeName());
@@ -74,6 +77,8 @@ class StartJourneyWriterTest {
         StartJourneyResult result = writer.write(new StartJourneyCommand(99L, "QR-001"));
 
         assertFalse(result.created());
+        assertEquals(existing.getStatus(), result.status());
+        assertEquals(existing.getStartedAt(), result.startedAt());
         assertEquals("PLATE-1", result.plate());
         assertEquals("Route A", result.routeName());
         verify(journeyRepository, never()).saveAndFlush(any());

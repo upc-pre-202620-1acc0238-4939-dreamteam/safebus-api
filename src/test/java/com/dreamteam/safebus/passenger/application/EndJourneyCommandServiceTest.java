@@ -44,7 +44,9 @@ class EndJourneyCommandServiceTest {
 
         EndJourneyResult result = service.end(new EndJourneyCommand(1L, USER_ID, "MANUAL"));
 
-        assertTrue(result.changed());
+        assertEquals(JourneyStatus.ENDED, result.status());
+        assertEquals(JourneyEndReason.MANUAL, result.endReason());
+        assertEquals(Instant.parse("2026-01-01T12:00:00Z"), result.endedAt());
         assertEquals(JourneyStatus.ENDED, journey.getStatus());
         assertEquals(JourneyEndReason.MANUAL, journey.getEndReason());
     }
@@ -57,20 +59,23 @@ class EndJourneyCommandServiceTest {
 
         EndJourneyResult result = service.end(new EndJourneyCommand(1L, USER_ID, "SIGN_OUT"));
 
-        assertTrue(result.changed());
+        assertEquals(JourneyEndReason.SIGN_OUT, result.endReason());
         assertEquals(JourneyEndReason.SIGN_OUT, journey.getEndReason());
     }
 
     @Test
-    void end_alreadyEnded_idempotentReturnsFalse() {
+    void end_alreadyEnded_returnsOriginalEndData() {
         PassengerJourney journey = PassengerJourney.start(USER_ID, 10L, 20L, CLOCK);
-        journey.end(JourneyEndReason.MANUAL, Instant.now(CLOCK));
+        Instant firstEnd = Instant.parse("2026-01-01T11:00:00Z");
+        journey.end(JourneyEndReason.MANUAL, firstEnd);
         when(journeyRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(journey));
         when(journeyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         EndJourneyResult result = service.end(new EndJourneyCommand(1L, USER_ID, "SIGN_OUT"));
 
-        assertFalse(result.changed());
+        assertEquals(JourneyStatus.ENDED, result.status());
+        assertEquals(firstEnd, result.endedAt());
+        assertEquals(JourneyEndReason.MANUAL, result.endReason());
     }
 
     @Test
@@ -100,9 +105,21 @@ class EndJourneyCommandServiceTest {
     }
 
     @Test
-    void end_nullReason_throwsInvalidEndReason() {
+    void end_nullReason_endsWithManual() {
+        PassengerJourney journey = PassengerJourney.start(USER_ID, 10L, 20L, CLOCK);
+        when(journeyRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(journey));
+        when(journeyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        EndJourneyResult result = service.end(new EndJourneyCommand(1L, USER_ID, null));
+
+        assertEquals(JourneyEndReason.MANUAL, result.endReason());
+        assertEquals(JourneyEndReason.MANUAL, journey.getEndReason());
+    }
+
+    @Test
+    void end_blankReason_throwsInvalidEndReason() {
         RuleViolationException ex = assertThrows(RuleViolationException.class,
-            () -> service.end(new EndJourneyCommand(1L, USER_ID, null)));
+            () -> service.end(new EndJourneyCommand(1L, USER_ID, "  ")));
         assertEquals("INVALID_END_REASON", ex.code());
     }
 }

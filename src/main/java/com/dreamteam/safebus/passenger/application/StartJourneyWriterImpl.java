@@ -56,6 +56,7 @@ public class StartJourneyWriterImpl implements StartJourneyWriter {
             if (activeJourney.getBusId().equals(bus.busId())) {
                 FleetContextFacade.ServiceInfo si = serviceInfo(bus, shift);
                 return new StartJourneyResult(activeJourney.getId(), false,
+                    activeJourney.getStatus(), activeJourney.getStartedAt(),
                     si.plate(), si.companyName(), si.companyValidated(),
                     si.routeName(), si.origin(), si.destination(), si.driverPublicName());
             }
@@ -68,6 +69,7 @@ public class StartJourneyWriterImpl implements StartJourneyWriter {
         journeyRepository.saveAndFlush(journey);
         FleetContextFacade.ServiceInfo si = serviceInfo(bus, shift);
         return new StartJourneyResult(journey.getId(), true,
+            journey.getStatus(), journey.getStartedAt(),
             si.plate(), si.companyName(), si.companyValidated(),
             si.routeName(), si.origin(), si.destination(), si.driverPublicName());
     }

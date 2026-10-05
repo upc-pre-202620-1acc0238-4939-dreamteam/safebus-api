@@ -40,30 +40,35 @@ public class JourneyController {
     @PostMapping
     @Operation(summary = "Start or resume a passenger journey")
     @ApiResponse(responseCode = "201", description = "Journey started")
-    @ApiResponse(responseCode = "200", description = "Existing active journey on same bus returned")
+    @ApiResponse(responseCode = "200", description = "Existing active journey on same bus returned (same body as 201)")
     @ApiResponse(responseCode = "401", description = "No token provided")
     @ApiResponse(responseCode = "403", description = "Passenger role required")
     @ApiResponse(responseCode = "409", description = "Active journey on a different bus (ACTIVE_JOURNEY_EXISTS)")
-    @ApiResponse(responseCode = "422", description = "BUS_QR_INVALID or BUS_NOT_IN_SERVICE")
-    public ResponseEntity<JourneyResource> start(@RequestBody StartJourneyRequest request) {
+    @ApiResponse(responseCode = "422", description = "BUS_QR_INVALID (also when the body or busQrCode is missing) or BUS_NOT_IN_SERVICE")
+    public ResponseEntity<JourneyResource> start(@RequestBody(required = false) StartJourneyRequest request) {
         Long userId = currentUserProvider.current().userId();
-        StartJourneyResult result = startService.start(new StartJourneyCommand(userId, request.busQrCode()));
+        String qrCode = request == null ? null : request.busQrCode();
+        StartJourneyResult result = startService.start(new StartJourneyCommand(userId, qrCode));
         HttpStatus status = result.created() ? HttpStatus.CREATED : HttpStatus.OK;
         return ResponseEntity.status(status).body(new JourneyResource(
-            result.journeyId(),
-            result.plate(), result.companyName(), result.companyValidated(),
-            result.routeName(), result.origin(), result.destination(), result.driverPublicName()));
+            result.journeyId(), result.status().name(), result.startedAt(),
+            new JourneyResource.BusResource(result.plate(), result.companyName(),
+                result.companyValidated() ? "VALIDATED" : "NOT_VALIDATED"),
+            new JourneyResource.RouteResource(result.routeName(), result.origin(), result.destination()),
+            result.driverPublicName()));
     }
 
     @PostMapping("/{id}/end")
-    @Operation(summary = "End a passenger journey")
-    @ApiResponse(responseCode = "200", description = "Journey ended (or already ended — idempotent)")
+    @Operation(summary = "End a passenger journey; reason is optional and defaults to MANUAL")
+    @ApiResponse(responseCode = "200", description = "Journey ended (or already ended: original status, endedAt and endReason are returned)")
     @ApiResponse(responseCode = "401", description = "No token provided")
     @ApiResponse(responseCode = "403", description = "Passenger role required or journey access denied")
     @ApiResponse(responseCode = "422", description = "INVALID_END_REASON")
-    public EndJourneyResource end(@PathVariable Long id, @RequestBody EndJourneyRequest request) {
+    public EndJourneyResource end(@PathVariable Long id, @RequestBody(required = false) EndJourneyRequest request) {
         Long userId = currentUserProvider.current().userId();
-        EndJourneyResult result = endService.end(new EndJourneyCommand(id, userId, request.reason()));
-        return new EndJourneyResource(result.journeyId(), result.changed());
+        String reason = request == null ? null : request.reason();
+        EndJourneyResult result = endService.end(new EndJourneyCommand(id, userId, reason));
+        return new EndJourneyResource(result.journeyId(), result.status().name(),
+            result.endedAt(), result.endReason().name());
     }
 }

@@ -37,14 +37,15 @@ public class EndJourneyCommandServiceImpl implements EndJourneyCommandService {
                 "journey does not belong to the authenticated passenger");
         }
 
-        boolean changed = journey.end(reason, Instant.now(clock));
+        journey.end(reason, Instant.now(clock));
         journeyRepository.save(journey);
-        return new EndJourneyResult(journey.getId(), changed);
+        return new EndJourneyResult(journey.getId(), journey.getStatus(),
+            journey.getEndedAt(), journey.getEndReason());
     }
 
     private JourneyEndReason parseReason(String reason) {
         if (reason == null) {
-            throw new RuleViolationException("INVALID_END_REASON", "reason is required");
+            return JourneyEndReason.MANUAL;
         }
         return switch (reason.trim().toUpperCase()) {
             case "MANUAL"   -> JourneyEndReason.MANUAL;

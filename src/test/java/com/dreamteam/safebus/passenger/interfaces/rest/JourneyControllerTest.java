@@ -94,6 +94,13 @@ class JourneyControllerTest {
             .authorities(new SimpleGrantedAuthority("ROLE_PASSENGER"));
     }
 
+    private static long journeyIdOf(MvcResult result) throws Exception {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"journeyId\":(\\d+)")
+            .matcher(result.getResponse().getContentAsString());
+        m.find();
+        return Long.parseLong(m.group(1));
+    }
+
     // --- US06 S1: start journey ---
 
     @Test
@@ -103,14 +110,18 @@ class JourneyControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"busQrCode\":\"JCT-QR-001\"}"))
             .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.id").isNumber())
-            .andExpect(jsonPath("$.plate").value("JCT-BUS01"))
-            .andExpect(jsonPath("$.companyName").value("Journey Test Co"))
-            .andExpect(jsonPath("$.companyValidated").value(true))
-            .andExpect(jsonPath("$.routeName").value("JCT Route"))
-            .andExpect(jsonPath("$.origin").value("X"))
-            .andExpect(jsonPath("$.destination").value("Y"))
-            .andExpect(jsonPath("$.driverPublicName").value("JCT Driver"));
+            .andExpect(jsonPath("$.journeyId").isNumber())
+            .andExpect(jsonPath("$.status").value("ACTIVE"))
+            .andExpect(jsonPath("$.startedAt").isNotEmpty())
+            .andExpect(jsonPath("$.bus.plate").value("JCT-BUS01"))
+            .andExpect(jsonPath("$.bus.companyName").value("Journey Test Co"))
+            .andExpect(jsonPath("$.bus.companyValidationStatus").value("VALIDATED"))
+            .andExpect(jsonPath("$.route.name").value("JCT Route"))
+            .andExpect(jsonPath("$.route.origin").value("X"))
+            .andExpect(jsonPath("$.route.destination").value("Y"))
+            .andExpect(jsonPath("$.driverPublicName").value("JCT Driver"))
+            .andExpect(jsonPath("$.id").doesNotExist())
+            .andExpect(jsonPath("$.companyValidated").doesNotExist());
     }
 
     @Test
@@ -120,7 +131,7 @@ class JourneyControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"busQrCode\":\"JCT-QR-001\"}"))
             .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.plate").value("JCT-BUS01"))
+            .andExpect(jsonPath("$.bus.plate").value("JCT-BUS01"))
             .andReturn();
 
         String firstBody = first.getResponse().getContentAsString();
@@ -130,7 +141,7 @@ class JourneyControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"busQrCode\":\"JCT-QR-001\"}"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.plate").value("JCT-BUS01"))
+            .andExpect(jsonPath("$.bus.plate").value("JCT-BUS01"))
             .andReturn();
 
         assertEquals(firstBody, second.getResponse().getContentAsString());
@@ -199,7 +210,7 @@ class JourneyControllerTest {
     // --- US06 S4: end journey ---
 
     @Test
-    void end_activeJourney_returns200Changed() throws Exception {
+    void end_activeJourney_returns200WithEndedJourney() throws Exception {
         // Start first
         MvcResult startResult = mockMvc.perform(post(JOURNEYS_URL)
                 .with(passengerJwt(PASSENGER_USER_ID))
@@ -208,33 +219,36 @@ class JourneyControllerTest {
             .andExpect(status().isCreated())
             .andReturn();
 
-        String journeyBody = startResult.getResponse().getContentAsString();
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"id\":(\\d+)").matcher(journeyBody);
-        m.find();
-        long journeyId = Long.parseLong(m.group(1));
+        long journeyId = journeyIdOf(startResult);
 
         mockMvc.perform(post(JOURNEYS_URL + "/" + journeyId + "/end")
                 .with(passengerJwt(PASSENGER_USER_ID))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"reason\":\"MANUAL\"}"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.id").value(journeyId))
-            .andExpect(jsonPath("$.changed").value(true));
+            .andExpect(jsonPath("$.journeyId").value(journeyId))
+            .andExpect(jsonPath("$.status").value("ENDED"))
+            .andExpect(jsonPath("$.endedAt").isNotEmpty())
+            .andExpect(jsonPath("$.endReason").value("MANUAL"))
+            .andExpect(jsonPath("$.changed").doesNotExist());
     }
 
     @Test
-    void end_alreadyEnded_returns200NotChanged() throws Exception {
+    void end_alreadyEnded_returns200WithOriginalEndData() throws Exception {
         PassengerJourney journey = journeyRepository.saveAndFlush(
             PassengerJourney.start(PASSENGER_USER_ID, bus.getId(), shift.getId(), clock));
         journey.end(JourneyEndReason.MANUAL, Instant.now(clock));
-        journeyRepository.saveAndFlush(journey);
+        journey = journeyRepository.saveAndFlush(journey);
 
         mockMvc.perform(post(JOURNEYS_URL + "/" + journey.getId() + "/end")
                 .with(passengerJwt(PASSENGER_USER_ID))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"reason\":\"SIGN_OUT\"}"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.changed").value(false));
+            .andExpect(jsonPath("$.journeyId").value(journey.getId()))
+            .andExpect(jsonPath("$.status").value("ENDED"))
+            .andExpect(jsonPath("$.endedAt").value(journey.getEndedAt().toString()))
+            .andExpect(jsonPath("$.endReason").value("MANUAL"));
     }
 
     @Test

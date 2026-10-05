@@ -61,7 +61,7 @@ public class LocationEvent {
         e.point = new GeoPoint(latitude, longitude);
         e.accuracyMeters = accuracyMeters;
         e.capturedAt = capturedAt.truncatedTo(ChronoUnit.MILLIS);
-        e.receivedAt = Instant.now(clock);
+        e.receivedAt = Instant.now(clock).truncatedTo(ChronoUnit.MILLIS);
         e.appliedAsCurrent = false;
         return e;
     }

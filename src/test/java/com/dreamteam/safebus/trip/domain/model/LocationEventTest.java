@@ -58,6 +58,15 @@ class LocationEventTest {
     }
 
     @Test
+    void create_receivedAtIsTruncatedToMillis() {
+        Clock clock = Clock.fixed(Instant.parse("2026-10-05T06:00:41.292843800Z"), ZoneOffset.UTC);
+        LocationEvent event = LocationEvent.create(
+                "123e4567-e89b-12d3-a456-426614174000", 1L, 1L, -12.05, -77.04, 5.0,
+                Instant.parse("2026-10-05T06:00:40Z"), clock);
+        assertEquals(Instant.parse("2026-10-05T06:00:41.292Z"), event.getReceivedAt());
+    }
+
+    @Test
     void hasSamePayloadAs_differentAccuracy_returnsFalse() {
         Instant t = Instant.parse("2030-01-01T08:00:00Z");
         LocationEvent e = event(t);

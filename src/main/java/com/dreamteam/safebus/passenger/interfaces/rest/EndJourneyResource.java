@@ -1,3 +1,5 @@
 package com.dreamteam.safebus.passenger.interfaces.rest;
 
-public record EndJourneyResource(Long id, boolean changed) {}
+import java.time.Instant;
+
+public record EndJourneyResource(Long journeyId, String status, Instant endedAt, String endReason) {}

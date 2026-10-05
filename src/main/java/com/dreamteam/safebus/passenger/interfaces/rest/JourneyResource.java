@@ -1,7 +1,12 @@
 package com.dreamteam.safebus.passenger.interfaces.rest;
 
+import java.time.Instant;
+
 public record JourneyResource(
-    Long id,
-    String plate, String companyName, boolean companyValidated,
-    String routeName, String origin, String destination, String driverPublicName
-) {}
+    Long journeyId, String status, Instant startedAt,
+    BusResource bus, RouteResource route, String driverPublicName
+) {
+    public record BusResource(String plate, String companyName, String companyValidationStatus) {}
+
+    public record RouteResource(String name, String origin, String destination) {}
+}

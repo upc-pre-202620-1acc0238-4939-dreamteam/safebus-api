@@ -107,13 +107,13 @@ Feature: Passenger Identity and Journey (US23, US06)
     Given a passenger has an active journey
     When POST /api/v1/journeys/{id}/end with reason "MANUAL"
     Then the response status is 200
-    And changed is true
+    And the response contains status "ENDED", endedAt and endReason "MANUAL"
 
-  Scenario: Ending an already-ended journey is idempotent and returns changed false
+  Scenario: Ending an already-ended journey is idempotent and returns the original end data
     Given a passenger's journey is already ENDED
     When POST /api/v1/journeys/{id}/end with reason "SIGN_OUT"
     Then the response status is 200
-    And changed is false
+    And the response contains the original endedAt and endReason
 
   Scenario: Another passenger attempting to end the journey returns 403
     Given a journey owned by passenger A
