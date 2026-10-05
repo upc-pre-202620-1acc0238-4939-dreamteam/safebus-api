@@ -2,6 +2,8 @@ package com.dreamteam.safebus.trip.interfaces.rest;
 
 import com.dreamteam.safebus.trip.application.ActivateShiftCommand;
 import com.dreamteam.safebus.trip.application.ActivateShiftCommandService;
+import com.dreamteam.safebus.trip.application.CloseShiftCommand;
+import com.dreamteam.safebus.trip.application.CloseShiftCommandService;
 import com.dreamteam.safebus.trip.application.GetCurrentAssignmentQueryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -10,6 +12,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,11 +26,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class ShiftController {
 
     private final ActivateShiftCommandService activateShiftCommandService;
+    private final CloseShiftCommandService closeShiftCommandService;
     private final GetCurrentAssignmentQueryService getCurrentAssignmentQueryService;
 
     public ShiftController(ActivateShiftCommandService activateShiftCommandService,
+                           CloseShiftCommandService closeShiftCommandService,
                            GetCurrentAssignmentQueryService getCurrentAssignmentQueryService) {
         this.activateShiftCommandService = activateShiftCommandService;
+        this.closeShiftCommandService = closeShiftCommandService;
         this.getCurrentAssignmentQueryService = getCurrentAssignmentQueryService;
     }
 
@@ -43,6 +49,16 @@ public class ShiftController {
         return ActivateShiftResourceFromEntityAssembler.toResource(
             activateShiftCommandService.activate(
                 new ActivateShiftCommand(request.assignmentId(), request.qrCredential())));
+    }
+
+    @PostMapping("/{id}/close")
+    @Operation(summary = "Close the authenticated driver's shift; repeating the call returns the original closure")
+    @ApiResponse(responseCode = "200", description = "Shift closed, or already closed")
+    @ApiResponse(responseCode = "401", description = "No token provided")
+    @ApiResponse(responseCode = "403", description = "Driver role required, or the shift does not exist or is not the caller's")
+    public CloseShiftResource close(@PathVariable("id") Long id) {
+        return CloseShiftResourceFromEntityAssembler.toResource(
+            closeShiftCommandService.close(new CloseShiftCommand(id)));
     }
 
     @GetMapping("/me/assignment")
