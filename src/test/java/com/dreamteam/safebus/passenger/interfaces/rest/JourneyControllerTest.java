@@ -11,9 +11,11 @@ import com.dreamteam.safebus.fleet.domain.repository.DriverRepository;
 import com.dreamteam.safebus.fleet.domain.repository.RouteRepository;
 import com.dreamteam.safebus.fleet.domain.repository.ShiftAssignmentRepository;
 import com.dreamteam.safebus.passenger.domain.model.JourneyEndReason;
+import com.dreamteam.safebus.passenger.domain.model.JourneyStatus;
 import com.dreamteam.safebus.passenger.domain.model.PassengerJourney;
 import com.dreamteam.safebus.passenger.domain.repository.PassengerJourneyRepository;
 import com.dreamteam.safebus.trip.domain.model.DriverShift;
+import com.dreamteam.safebus.trip.domain.model.ShiftStatus;
 import com.dreamteam.safebus.trip.domain.repository.DriverShiftRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +34,7 @@ import java.time.Duration;
 import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -157,6 +160,7 @@ class JourneyControllerTest {
                 .content("{\"busQrCode\":\"UNKNOWN\"}"))
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("BUS_QR_INVALID"));
+        assertEquals(0, journeyRepository.count());
     }
 
     @Test
@@ -181,6 +185,7 @@ class JourneyControllerTest {
                     .content("{\"busQrCode\":\"JCT-QR-002\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("ACTIVE_JOURNEY_EXISTS"));
+            assertEquals(1, journeyRepository.count());
         } finally {
             journeyRepository.deleteAll();
             driverShiftRepository.delete(shift2);
@@ -195,6 +200,7 @@ class JourneyControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"busQrCode\":\"JCT-QR-001\"}"))
             .andExpect(status().isUnauthorized());
+        assertEquals(0, journeyRepository.count());
     }
 
     @Test
@@ -205,6 +211,7 @@ class JourneyControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"busQrCode\":\"JCT-QR-001\"}"))
             .andExpect(status().isForbidden());
+        assertEquals(0, journeyRepository.count());
     }
 
     // --- US06 S4: end journey ---
@@ -275,6 +282,7 @@ class JourneyControllerTest {
                 .content("{\"reason\":\"AUTOMATIC_SEPARATION\"}"))
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("INVALID_END_REASON"));
+        assertEquals(JourneyStatus.ACTIVE, journeyRepository.findById(journey.getId()).orElseThrow().getStatus());
     }
 
     // --- optional bodies ---
@@ -325,5 +333,81 @@ class JourneyControllerTest {
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("BUS_QR_INVALID"));
         assertEquals(0, journeyRepository.count());
+    }
+
+    // --- US06 S2/S3: further rejections leave no journey row ---
+
+    private void assertStartRejected(String body, String code) throws Exception {
+        mockMvc.perform(post(JOURNEYS_URL)
+                .with(passengerJwt(PASSENGER_USER_ID))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+            .andExpect(status().isUnprocessableEntity())
+            .andExpect(jsonPath("$.code").value(code));
+        assertEquals(0, journeyRepository.count());
+    }
+
+    @Test
+    void start_blankQr_returns422BusQrInvalidAndNoJourney() throws Exception {
+        assertStartRejected("{\"busQrCode\":\"   \"}", "BUS_QR_INVALID");
+    }
+
+    @Test
+    void start_nullQr_returns422BusQrInvalidAndNoJourney() throws Exception {
+        assertStartRejected("{\"busQrCode\":null}", "BUS_QR_INVALID");
+        assertStartRejected("{}", "BUS_QR_INVALID");
+    }
+
+    @Test
+    void start_disabledBus_returns422BusQrInvalidAndNoJourney() throws Exception {
+        bus.disable();
+        busRepository.save(bus);
+        assertStartRejected("{\"busQrCode\":\"JCT-QR-001\"}", "BUS_QR_INVALID");
+    }
+
+    @Test
+    void start_busWithoutShift_returns422BusNotInServiceAndNoJourney() throws Exception {
+        driverShiftRepository.delete(shift);
+        assertStartRejected("{\"busQrCode\":\"JCT-QR-001\"}", "BUS_NOT_IN_SERVICE");
+        shift = driverShiftRepository.save(
+            DriverShift.start(assignment.getId(), driver.getId(), bus.getId(), route.getId(), clock));
+    }
+
+    @Test
+    void start_busWhoseOnlyShiftIsClosed_returns422BusNotInServiceAndNoJourney() throws Exception {
+        java.lang.reflect.Field f = DriverShift.class.getDeclaredField("status");
+        f.setAccessible(true);
+        f.set(shift, ShiftStatus.CLOSED);
+        driverShiftRepository.save(shift);
+
+        assertStartRejected("{\"busQrCode\":\"JCT-QR-001\"}", "BUS_NOT_IN_SERVICE");
+    }
+
+    // --- US06: a new journey can start after the previous one ended ---
+
+    @Test
+    void start_afterEndingFirstJourney_returns201WithNewJourney() throws Exception {
+        MvcResult first = mockMvc.perform(post(JOURNEYS_URL)
+                .with(passengerJwt(PASSENGER_USER_ID))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"busQrCode\":\"JCT-QR-001\"}"))
+            .andExpect(status().isCreated())
+            .andReturn();
+        long firstId = journeyIdOf(first);
+
+        mockMvc.perform(post(JOURNEYS_URL + "/" + firstId + "/end")
+                .with(passengerJwt(PASSENGER_USER_ID)))
+            .andExpect(status().isOk());
+
+        MvcResult second = mockMvc.perform(post(JOURNEYS_URL)
+                .with(passengerJwt(PASSENGER_USER_ID))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"busQrCode\":\"JCT-QR-001\"}"))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.status").value("ACTIVE"))
+            .andReturn();
+
+        assertNotEquals(firstId, journeyIdOf(second));
+        assertEquals(2, journeyRepository.count());
     }
 }
