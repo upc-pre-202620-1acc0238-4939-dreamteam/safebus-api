@@ -13,7 +13,6 @@ import com.dreamteam.safebus.fleet.domain.repository.ShiftAssignmentRepository;
 import com.dreamteam.safebus.shared.application.AuthenticatedUser;
 import com.dreamteam.safebus.shared.application.CurrentUserProvider;
 import com.dreamteam.safebus.shared.domain.exceptions.ConflictException;
-import com.dreamteam.safebus.shared.domain.exceptions.NotFoundException;
 import com.dreamteam.safebus.shared.domain.exceptions.RuleViolationException;
 import com.dreamteam.safebus.trip.domain.model.DriverShift;
 import com.dreamteam.safebus.trip.domain.model.ShiftStatus;
@@ -110,37 +109,34 @@ class ActivateShiftCommandServiceTest {
     }
 
     @Test
-    void activate_unknownCredential_throwsAndNoDriverShift() {
+    void activate_unknownCredential_throwsCredentialInvalidAndNoDriverShift() {
         mockUser(300L);
         long before = driverShiftRepository.count();
 
-        NotFoundException ex = assertThrows(NotFoundException.class,
+        RuleViolationException ex = assertThrows(RuleViolationException.class,
             () -> service.activate(new ActivateShiftCommand(1L, "NONEXISTENT-QR")));
 
-        assertEquals("CREDENTIAL_NOT_FOUND", ex.code());
+        assertEquals("CREDENTIAL_INVALID", ex.code());
         assertEquals(before, driverShiftRepository.count());
     }
 
     @Test
-    void activate_credentialOfAnotherDriver_sameBodyAsUnknown() {
+    void activate_credentialOfAnotherDriver_throwsCredentialNotOwned() {
         Driver other = validDriver(301L, "AS-QR-002");
         assignedShift(other);
         mockUser(999L); // authenticated as a different user
 
         long before = driverShiftRepository.count();
 
-        NotFoundException fromOther = assertThrows(NotFoundException.class,
+        RuleViolationException ex = assertThrows(RuleViolationException.class,
             () -> service.activate(new ActivateShiftCommand(1L, "AS-QR-002")));
-        NotFoundException fromUnknown = assertThrows(NotFoundException.class,
-            () -> service.activate(new ActivateShiftCommand(1L, "NONEXISTENT-QR")));
 
-        assertEquals(fromUnknown.code(), fromOther.code());
-        assertEquals(fromUnknown.getMessage(), fromOther.getMessage());
+        assertEquals("CREDENTIAL_NOT_OWNED", ex.code());
         assertEquals(before, driverShiftRepository.count());
     }
 
     @Test
-    void activate_disabledDriver_throwsDriverDisabledAndNoDriverShift() {
+    void activate_disabledDriver_throwsCredentialDisabledAndNoDriverShift() {
         Driver d = validDriver(302L, "AS-QR-003");
         d.disable();
         driverRepository.save(d);
@@ -152,8 +148,11 @@ class ActivateShiftCommandServiceTest {
         RuleViolationException ex = assertThrows(RuleViolationException.class,
             () -> service.activate(new ActivateShiftCommand(sa.getId(), "AS-QR-003")));
 
-        assertEquals("DRIVER_DISABLED", ex.code());
+        assertEquals("CREDENTIAL_DISABLED", ex.code());
         assertEquals(before, driverShiftRepository.count());
+        ShiftAssignment unchanged = assignmentRepository.findById(sa.getId()).orElseThrow();
+        assertEquals(com.dreamteam.safebus.fleet.domain.model.AssignmentStatus.ASSIGNED,
+            unchanged.getStatus());
     }
 
     @Test
@@ -171,6 +170,9 @@ class ActivateShiftCommandServiceTest {
 
         assertEquals("CREDENTIAL_EXPIRED", ex.code());
         assertEquals(before, driverShiftRepository.count());
+        ShiftAssignment unchanged = assignmentRepository.findById(sa.getId()).orElseThrow();
+        assertEquals(com.dreamteam.safebus.fleet.domain.model.AssignmentStatus.ASSIGNED,
+            unchanged.getStatus());
     }
 
     @Test

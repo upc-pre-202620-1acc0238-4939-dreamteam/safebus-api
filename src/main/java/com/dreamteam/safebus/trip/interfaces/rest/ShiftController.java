@@ -37,9 +37,8 @@ public class ShiftController {
     @ApiResponse(responseCode = "201", description = "Shift activated")
     @ApiResponse(responseCode = "401", description = "No token provided")
     @ApiResponse(responseCode = "403", description = "Driver role required")
-    @ApiResponse(responseCode = "404", description = "Credential or assignment not found")
-    @ApiResponse(responseCode = "409", description = "Assignment is already active")
-    @ApiResponse(responseCode = "422", description = "Driver disabled, credential expired, or validation failed")
+    @ApiResponse(responseCode = "409", description = "Assignment is not available for activation")
+    @ApiResponse(responseCode = "422", description = "Invalid credential, assignment not found, driver disabled, credential expired, or validation failed")
     public ActivateShiftResource activate(@Valid @RequestBody ActivateShiftRequest request) {
         return ActivateShiftResourceFromEntityAssembler.toResource(
             activateShiftCommandService.activate(

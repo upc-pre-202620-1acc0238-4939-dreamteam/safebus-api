@@ -100,26 +100,26 @@ class ShiftControllerTest {
     }
 
     @Test
-    void activate_unknownCredential_returns404CredentialNotFound() throws Exception {
+    void activate_unknownCredential_returns422CredentialInvalid() throws Exception {
         mockMvc.perform(post(ACTIVATE_URL).with(driverJwt(500L))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"assignmentId\":1,\"qrCredential\":\"NONEXISTENT-QR\"}"))
-            .andExpect(status().isNotFound())
-            .andExpect(jsonPath("$.code").value("CREDENTIAL_NOT_FOUND"));
+            .andExpect(status().isUnprocessableEntity())
+            .andExpect(jsonPath("$.code").value("CREDENTIAL_INVALID"));
     }
 
     @Test
-    void activate_credentialOfAnotherDriver_returns404SameAsUnknown() throws Exception {
+    void activate_credentialOfAnotherDriver_returns422CredentialNotOwned() throws Exception {
         // SHFT-DRV-QR-002 belongs to otherDriver (userAccountId 501), but JWT is for user 500
         mockMvc.perform(post(ACTIVATE_URL).with(driverJwt(500L))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"assignmentId\":1,\"qrCredential\":\"SHFT-DRV-QR-002\"}"))
-            .andExpect(status().isNotFound())
-            .andExpect(jsonPath("$.code").value("CREDENTIAL_NOT_FOUND"));
+            .andExpect(status().isUnprocessableEntity())
+            .andExpect(jsonPath("$.code").value("CREDENTIAL_NOT_OWNED"));
     }
 
     @Test
-    void activate_disabledDriver_returns422DriverDisabled() throws Exception {
+    void activate_disabledDriver_returns422CredentialDisabled() throws Exception {
         driver.disable();
         driverRepository.save(driver);
         ShiftAssignment sa = assignedShift(driver);
@@ -128,7 +128,7 @@ class ShiftControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(String.format("{\"assignmentId\":%d,\"qrCredential\":\"SHFT-DRV-QR-001\"}", sa.getId())))
             .andExpect(status().isUnprocessableEntity())
-            .andExpect(jsonPath("$.code").value("DRIVER_DISABLED"));
+            .andExpect(jsonPath("$.code").value("CREDENTIAL_DISABLED"));
     }
 
     @Test
@@ -227,6 +227,16 @@ class ShiftControllerTest {
     }
 
     @Test
+    void activate_passengerRole_returns403() throws Exception {
+        mockMvc.perform(post(ACTIVATE_URL)
+                .with(jwt().jwt(b -> b.claim("role", "PASSENGER").subject("1"))
+                    .authorities(new SimpleGrantedAuthority("ROLE_PASSENGER")))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"assignmentId\":1,\"qrCredential\":\"X\"}"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
     void activate_noToken_returns401() throws Exception {
         mockMvc.perform(post(ACTIVATE_URL)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -264,6 +274,14 @@ class ShiftControllerTest {
         mockMvc.perform(get(ASSIGNMENT_URL)
                 .with(jwt().jwt(b -> b.claim("role", "SUPERVISOR").subject("1"))
                     .authorities(new SimpleGrantedAuthority("ROLE_SUPERVISOR"))))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void getAssignment_passengerRole_returns403() throws Exception {
+        mockMvc.perform(get(ASSIGNMENT_URL)
+                .with(jwt().jwt(b -> b.claim("role", "PASSENGER").subject("1"))
+                    .authorities(new SimpleGrantedAuthority("ROLE_PASSENGER"))))
             .andExpect(status().isForbidden());
     }
 
