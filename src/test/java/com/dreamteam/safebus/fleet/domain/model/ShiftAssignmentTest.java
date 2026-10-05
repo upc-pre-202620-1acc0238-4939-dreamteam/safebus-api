@@ -1,5 +1,6 @@
 package com.dreamteam.safebus.fleet.domain.model;
 
+import com.dreamteam.safebus.shared.domain.exceptions.ConflictException;
 import com.dreamteam.safebus.shared.domain.exceptions.RuleViolationException;
 import org.junit.jupiter.api.Test;
 
@@ -106,5 +107,36 @@ class ShiftAssignmentTest {
     @Test
     void overlaps_disjoint_false() {
         assertFalse(ShiftAssignment.overlaps(T1, T2, T3, T4));
+    }
+
+    @Test
+    void close_active_becomesClosedAndReturnsTrue() {
+        ShiftAssignment sa = ShiftAssignment.create(1L, 2L, 3L, T1, T2, 99L, FIXED_CLOCK);
+        sa.activate();
+
+        assertTrue(sa.close());
+
+        assertEquals(AssignmentStatus.CLOSED, sa.getStatus());
+    }
+
+    @Test
+    void close_alreadyClosed_returnsFalseAndStaysClosed() {
+        ShiftAssignment sa = ShiftAssignment.create(1L, 2L, 3L, T1, T2, 99L, FIXED_CLOCK);
+        sa.activate();
+        sa.close();
+
+        assertFalse(sa.close());
+
+        assertEquals(AssignmentStatus.CLOSED, sa.getStatus());
+    }
+
+    @Test
+    void close_assigned_throwsConflictAssignmentNotActive() {
+        ShiftAssignment sa = ShiftAssignment.create(1L, 2L, 3L, T1, T2, 99L, FIXED_CLOCK);
+
+        ConflictException ex = assertThrows(ConflictException.class, sa::close);
+
+        assertEquals("ASSIGNMENT_NOT_ACTIVE", ex.code());
+        assertEquals(AssignmentStatus.ASSIGNED, sa.getStatus());
     }
 }
