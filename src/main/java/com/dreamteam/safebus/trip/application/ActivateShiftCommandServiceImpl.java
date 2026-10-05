@@ -2,7 +2,9 @@ package com.dreamteam.safebus.trip.application;
 
 import com.dreamteam.safebus.fleet.interfaces.acl.FleetContextFacade;
 import com.dreamteam.safebus.shared.application.CurrentUserProvider;
+import com.dreamteam.safebus.shared.domain.exceptions.ConflictException;
 import com.dreamteam.safebus.shared.domain.exceptions.RuleViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import com.dreamteam.safebus.trip.domain.model.DriverShift;
 import com.dreamteam.safebus.trip.domain.repository.DriverShiftRepository;
 import org.springframework.stereotype.Service;
@@ -55,6 +57,10 @@ public class ActivateShiftCommandServiceImpl implements ActivateShiftCommandServ
 
         DriverShift shift = DriverShift.start(activation.assignmentId(), activation.driverId(),
                                                activation.busId(), activation.routeId(), clock);
-        return driverShiftRepository.save(shift);
+        try {
+            return driverShiftRepository.saveAndFlush(shift);
+        } catch (DataIntegrityViolationException e) {
+            throw new ConflictException("ASSIGNMENT_NOT_AVAILABLE", "assignment is already active");
+        }
     }
 }

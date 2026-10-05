@@ -256,4 +256,21 @@ class ActivateShiftCommandServiceTest {
         assertEquals(com.dreamteam.safebus.fleet.domain.model.AssignmentStatus.CLOSED,
             unchanged.getStatus());
     }
+
+    @Test
+    void activate_dataIntegrityViolation_throwsConflictAssignmentNotAvailable() {
+        Driver d = validDriver(309L, "AS-QR-010");
+        ShiftAssignment sa = assignedShift(d);
+        // Pre-insert a DriverShift row with this assignmentId to trigger the unique constraint
+        driverShiftRepository.save(DriverShift.start(sa.getId(), d.getId(), bus.getId(), route.getId(), clock));
+        mockUser(309L);
+
+        long before = driverShiftRepository.count();
+
+        ConflictException ex = assertThrows(ConflictException.class,
+            () -> service.activate(new ActivateShiftCommand(sa.getId(), "AS-QR-010")));
+
+        assertEquals("ASSIGNMENT_NOT_AVAILABLE", ex.code());
+        assertEquals(before, driverShiftRepository.count());
+    }
 }
