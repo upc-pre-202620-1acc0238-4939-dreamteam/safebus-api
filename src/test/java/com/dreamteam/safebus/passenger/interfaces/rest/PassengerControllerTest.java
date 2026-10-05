@@ -11,7 +11,6 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.MvcResult;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -35,29 +34,18 @@ class PassengerControllerTest {
     @Autowired UserAccountRepository userAccountRepository;
     @Autowired StoredImageRepository storedImageRepository;
 
-    // Login IDs used across tests — cleaned up in tearDown
-    private static final List<String> TEST_LOGINS = List.of(
-        "pax-ctrl-s1-jpeg@test.com",
-        "pax-ctrl-s1-png@test.com",
-        "pax-ctrl-s2-dup@test.com",
-        "pax-ctrl-s2-dup2@test.com",
-        "pax-ctrl-s3-spacedni@test.com"
+    private static final List<String> TEST_DNIS = List.of(
+        "11223344",
+        "55667788",
+        "99887766",
+        "77665544"
     );
 
     @AfterEach
     void tearDown() {
-        // Delete in FK order: PassengerAccount → UserAccount → StoredImage
-        passengerAccountRepository.findAll().forEach(a -> {
-            if (TEST_LOGINS.contains(
-                    userAccountRepository.findById(a.getUserAccountId())
-                        .map(u -> u.getLoginId()).orElse(""))) {
-                passengerAccountRepository.delete(a);
-            }
-        });
-        for (String loginId : TEST_LOGINS) {
-            userAccountRepository.findByLoginId(loginId).ifPresent(u -> {
-                userAccountRepository.delete(u);
-            });
+        passengerAccountRepository.deleteAll();
+        for (String dni : TEST_DNIS) {
+            userAccountRepository.findByLoginId(dni).ifPresent(userAccountRepository::delete);
         }
         storedImageRepository.deleteAll();
     }
@@ -68,9 +56,9 @@ class PassengerControllerTest {
     void register_validJpeg_returns201WithId() throws Exception {
         mockMvc.perform(multipart(URL)
                 .file(facePhotoJpeg())
-                .param("loginId", "pax-ctrl-s1-jpeg@test.com")
                 .param("password", "Password1!")
                 .param("dni", "11223344")
+                .param("termsAccepted", "true")
                 .param("termsVersion", "2026-10"))
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.id").isNumber());
@@ -80,9 +68,9 @@ class PassengerControllerTest {
     void register_validPng_returns201() throws Exception {
         mockMvc.perform(multipart(URL)
                 .file(facePhotoPng())
-                .param("loginId", "pax-ctrl-s1-png@test.com")
                 .param("password", "Password1!")
                 .param("dni", "55667788")
+                .param("termsAccepted", "true")
                 .param("termsVersion", "2026-10"))
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.id").isNumber());
@@ -92,13 +80,13 @@ class PassengerControllerTest {
     void register_passwordStoredAsBcryptHash() throws Exception {
         mockMvc.perform(multipart(URL)
                 .file(facePhotoJpeg())
-                .param("loginId", "pax-ctrl-s1-jpeg@test.com")
                 .param("password", "Password1!")
                 .param("dni", "11223344")
+                .param("termsAccepted", "true")
                 .param("termsVersion", "2026-10"))
             .andExpect(status().isCreated());
 
-        var account = userAccountRepository.findByLoginId("pax-ctrl-s1-jpeg@test.com")
+        var account = userAccountRepository.findByLoginId("11223344")
             .orElseThrow(() -> new AssertionError("UserAccount not found"));
         assertTrue(account.getPasswordHash().startsWith("$2"),
             "password hash must be a BCrypt hash (starts with $2)");
@@ -108,13 +96,13 @@ class PassengerControllerTest {
     void register_passengerRoleNoCompanyId() throws Exception {
         mockMvc.perform(multipart(URL)
                 .file(facePhotoJpeg())
-                .param("loginId", "pax-ctrl-s1-jpeg@test.com")
                 .param("password", "Password1!")
                 .param("dni", "11223344")
+                .param("termsAccepted", "true")
                 .param("termsVersion", "2026-10"))
             .andExpect(status().isCreated());
 
-        var account = userAccountRepository.findByLoginId("pax-ctrl-s1-jpeg@test.com")
+        var account = userAccountRepository.findByLoginId("11223344")
             .orElseThrow(() -> new AssertionError("UserAccount not found"));
         assertEquals("PASSENGER", account.getRole().name());
         assertNull(account.getCompanyId());
@@ -126,9 +114,9 @@ class PassengerControllerTest {
     void register_invalidDni_returns422InvalidDni() throws Exception {
         mockMvc.perform(multipart(URL)
                 .file(facePhotoJpeg())
-                .param("loginId", "pax-ctrl-s1-jpeg@test.com")
                 .param("password", "Password1!")
                 .param("dni", "1234567")  // 7 digits
+                .param("termsAccepted", "true")
                 .param("termsVersion", "2026-10"))
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("INVALID_DNI"));
@@ -138,9 +126,9 @@ class PassengerControllerTest {
     void register_nullPassword_returns422PasswordRequired() throws Exception {
         mockMvc.perform(multipart(URL)
                 .file(facePhotoJpeg())
-                .param("loginId", "pax-ctrl-s1-jpeg@test.com")
                 // no password param — DNI/terms/photo pass; IAM layer rejects null password
                 .param("dni", "11223344")
+                .param("termsAccepted", "true")
                 .param("termsVersion", "2026-10"))
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("PASSWORD_REQUIRED"));
@@ -150,11 +138,10 @@ class PassengerControllerTest {
     void register_termsNotAccepted_returns422() throws Exception {
         mockMvc.perform(multipart(URL)
                 .file(facePhotoJpeg())
-                .param("loginId", "pax-ctrl-s1-jpeg@test.com")
                 .param("password", "Password1!")
                 .param("dni", "11223344")
-                // no termsVersion
-                )
+                // no termsAccepted part — triggers TERMS_NOT_ACCEPTED
+                .param("termsVersion", "2026-10"))
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("TERMS_NOT_ACCEPTED"));
     }
@@ -163,9 +150,9 @@ class PassengerControllerTest {
     void register_wrongTermsVersion_returns422TermsVersionInvalid() throws Exception {
         mockMvc.perform(multipart(URL)
                 .file(facePhotoJpeg())
-                .param("loginId", "pax-ctrl-s1-jpeg@test.com")
                 .param("password", "Password1!")
                 .param("dni", "11223344")
+                .param("termsAccepted", "true")
                 .param("termsVersion", "2025-01"))
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("TERMS_VERSION_INVALID"));
@@ -174,9 +161,9 @@ class PassengerControllerTest {
     @Test
     void register_noFacePhoto_returns422FacePhotoRequired() throws Exception {
         mockMvc.perform(multipart(URL)
-                .param("loginId", "pax-ctrl-s1-jpeg@test.com")
                 .param("password", "Password1!")
                 .param("dni", "11223344")
+                .param("termsAccepted", "true")
                 .param("termsVersion", "2026-10"))
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("FACE_PHOTO_REQUIRED"));
@@ -186,9 +173,9 @@ class PassengerControllerTest {
     void register_gifFacePhoto_returns422FacePhotoInvalid() throws Exception {
         mockMvc.perform(multipart(URL)
                 .file(new MockMultipartFile("facePhoto", "photo.gif", "image/gif", gifBytes()))
-                .param("loginId", "pax-ctrl-s1-jpeg@test.com")
                 .param("password", "Password1!")
                 .param("dni", "11223344")
+                .param("termsAccepted", "true")
                 .param("termsVersion", "2026-10"))
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("FACE_PHOTO_INVALID"));
@@ -200,13 +187,13 @@ class PassengerControllerTest {
 
         mockMvc.perform(multipart(URL)
                 .file(facePhotoJpeg())
-                .param("loginId", "pax-ctrl-s1-jpeg@test.com")
                 .param("password", "Password1!")
                 .param("dni", "1234567") // invalid DNI triggers 422, no writes at all
+                .param("termsAccepted", "true")
                 .param("termsVersion", "2026-10"))
             .andExpect(status().isUnprocessableEntity());
 
-        assertFalse(userAccountRepository.existsByLoginId("pax-ctrl-s1-jpeg@test.com"));
+        assertFalse(userAccountRepository.existsByLoginId("1234567"));
         assertEquals(imagesBefore, storedImageRepository.count());
     }
 
@@ -214,21 +201,19 @@ class PassengerControllerTest {
 
     @Test
     void register_duplicateDni_returns409DniAlreadyRegistered() throws Exception {
-        // First registration
         mockMvc.perform(multipart(URL)
                 .file(facePhotoJpeg())
-                .param("loginId", "pax-ctrl-s2-dup@test.com")
                 .param("password", "Password1!")
                 .param("dni", "99887766")
+                .param("termsAccepted", "true")
                 .param("termsVersion", "2026-10"))
             .andExpect(status().isCreated());
 
-        // Same DNI with surrounding spaces
         mockMvc.perform(multipart(URL)
                 .file(facePhotoPng())
-                .param("loginId", "pax-ctrl-s2-dup2@test.com")
                 .param("password", "DifferentPass2!")
                 .param("dni", "  99887766  ")
+                .param("termsAccepted", "true")
                 .param("termsVersion", "2026-10"))
             .andExpect(status().isConflict())
             .andExpect(jsonPath("$.code").value("DNI_ALREADY_REGISTERED"));
@@ -236,34 +221,30 @@ class PassengerControllerTest {
 
     @Test
     void register_duplicateDni_firstAccountUnchanged() throws Exception {
-        // First registration
         mockMvc.perform(multipart(URL)
                 .file(facePhotoJpeg())
-                .param("loginId", "pax-ctrl-s2-dup@test.com")
                 .param("password", "Password1!")
                 .param("dni", "77665544")
+                .param("termsAccepted", "true")
                 .param("termsVersion", "2026-10"))
             .andExpect(status().isCreated());
 
-        var firstAccount = userAccountRepository.findByLoginId("pax-ctrl-s2-dup@test.com")
+        var firstAccount = userAccountRepository.findByLoginId("77665544")
             .orElseThrow(() -> new AssertionError("First account not found"));
         String firstHash = firstAccount.getPasswordHash();
 
-        // Attempt with same DNI (different login, different password)
         mockMvc.perform(multipart(URL)
                 .file(facePhotoPng())
-                .param("loginId", "pax-ctrl-s2-dup2@test.com")
                 .param("password", "AnotherPass3!")
                 .param("dni", "77665544")
+                .param("termsAccepted", "true")
                 .param("termsVersion", "2026-10"))
             .andExpect(status().isConflict());
 
-        // First account's hash must be unchanged
-        var reloaded = userAccountRepository.findByLoginId("pax-ctrl-s2-dup@test.com")
-            .orElseThrow();
+        var reloaded = userAccountRepository.findByLoginId("77665544").orElseThrow();
         assertEquals(firstHash, reloaded.getPasswordHash());
-        // Second login must not exist
-        assertFalse(userAccountRepository.existsByLoginId("pax-ctrl-s2-dup2@test.com"));
+        assertEquals(1L, userAccountRepository.findAll().stream()
+            .filter(u -> "77665544".equals(u.getLoginId())).count());
     }
 
     // Helpers
@@ -283,7 +264,6 @@ class PassengerControllerTest {
     }
 
     private static byte[] gifBytes() {
-        // GIF89a magic bytes + minimal stub
         return new byte[]{0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x3B};
     }
 }

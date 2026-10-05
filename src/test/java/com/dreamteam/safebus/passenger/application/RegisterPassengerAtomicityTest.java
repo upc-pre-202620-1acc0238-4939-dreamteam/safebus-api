@@ -35,13 +35,12 @@ class RegisterPassengerAtomicityTest {
                 .thenThrow(new RuntimeException("forced failure in saveAndFlush"));
 
         long imageCountBefore = storedImageRepository.count();
-        String loginId = "atomicity-test@test.com";
 
         assertThrows(RuntimeException.class, () ->
                 commandService.register(new RegisterPassengerCommand(
-                        loginId, "Password1!", "12345678", "2026-10", validJpeg())));
+                        "Password1!", "12345678", "true", "2026-10", validJpeg())));
 
-        assertFalse(userAccountRepository.existsByLoginId(loginId),
+        assertFalse(userAccountRepository.existsByLoginId("12345678"),
                 "UserAccount must have been rolled back");
         assertEquals(imageCountBefore, storedImageRepository.count(),
                 "StoredImage must have been rolled back");

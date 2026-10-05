@@ -32,19 +32,19 @@ public class PassengerController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Register a passenger account")
     @ApiResponse(responseCode = "201", description = "Passenger registered")
-    @ApiResponse(responseCode = "409", description = "DNI already registered")
-    @ApiResponse(responseCode = "422", description = "Validation error (INVALID_DNI, PASSWORD_REQUIRED, etc.)")
+    @ApiResponse(responseCode = "409", description = "DNI already registered (DNI_ALREADY_REGISTERED)")
+    @ApiResponse(responseCode = "422", description = "Validation error (INVALID_DNI, TERMS_NOT_ACCEPTED, TERMS_VERSION_INVALID, PASSWORD_REQUIRED, FACE_PHOTO_REQUIRED, FACE_PHOTO_INVALID, FACE_PHOTO_TOO_LARGE)")
     public PassengerResource register(
-            @RequestParam(required = false) String loginId,
             @RequestParam(required = false) String password,
             @RequestParam(required = false) String dni,
+            @RequestParam(required = false) String termsAccepted,
             @RequestParam(required = false) String termsVersion,
             @RequestPart(required = false) MultipartFile facePhoto) throws IOException {
 
         byte[] photoBytes = facePhoto != null && !facePhoto.isEmpty() ? facePhoto.getBytes() : null;
 
         RegisterPassengerResult result = commandService.register(
-                new RegisterPassengerCommand(loginId, password, dni, termsVersion, photoBytes));
+                new RegisterPassengerCommand(password, dni, termsAccepted, termsVersion, photoBytes));
 
         return new PassengerResource(result.passengerAccountId());
     }

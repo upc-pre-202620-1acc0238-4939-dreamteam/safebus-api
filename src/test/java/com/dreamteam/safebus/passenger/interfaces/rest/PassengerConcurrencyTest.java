@@ -96,10 +96,7 @@ class PassengerConcurrencyTest {
     void tearDown() {
         journeyRepository.deleteAll();
         passengerAccountRepository.deleteAll();
-        // Remove IAM accounts created by registration tests
-        userAccountRepository.findAll().stream()
-            .filter(u -> u.getLoginId().startsWith("pconc-"))
-            .forEach(userAccountRepository::delete);
+        userAccountRepository.findByLoginId("31415926").ifPresent(userAccountRepository::delete);
         storedImageRepository.deleteAll();
         driverShiftRepository.deleteAll();
         assignmentRepository.deleteAll();
@@ -127,9 +124,9 @@ class PassengerConcurrencyTest {
                     barrier.await();
                     int status = mockMvc.perform(multipart(PASSENGERS_URL)
                             .file(new MockMultipartFile("facePhoto", "p.jpg", "image/jpeg", photo))
-                            .param("loginId", "pconc-reg-" + idx + "@test.com")
                             .param("password", "Password1!")
                             .param("dni", sharedDni)
+                            .param("termsAccepted", "true")
                             .param("termsVersion", "2026-10"))
                         .andReturn().getResponse().getStatus();
                     statuses.add(status);
