@@ -4,6 +4,7 @@ import com.dreamteam.safebus.iam.domain.repository.UserAccountRepository;
 import com.dreamteam.safebus.passenger.domain.repository.PassengerAccountRepository;
 import com.dreamteam.safebus.shared.domain.repository.StoredImageRepository;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -40,6 +41,19 @@ class PassengerControllerTest {
         "99887766",
         "77665544"
     );
+
+    private long usersBefore;
+
+    @BeforeEach
+    void captureBaseline() {
+        usersBefore = userAccountRepository.count();
+    }
+
+    private void assertNothingPersisted() {
+        assertEquals(0, passengerAccountRepository.count(), "no PassengerAccount");
+        assertEquals(usersBefore, userAccountRepository.count(), "no UserAccount");
+        assertEquals(0, storedImageRepository.count(), "no StoredImage");
+    }
 
     @AfterEach
     void tearDown() {
@@ -120,6 +134,7 @@ class PassengerControllerTest {
                 .param("termsVersion", "2026-10"))
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("INVALID_DNI"));
+        assertNothingPersisted();
     }
 
     @Test
@@ -132,6 +147,7 @@ class PassengerControllerTest {
                 .param("termsVersion", "2026-10"))
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("PASSWORD_REQUIRED"));
+        assertNothingPersisted();
     }
 
     @Test
@@ -144,6 +160,7 @@ class PassengerControllerTest {
                 .param("termsVersion", "2026-10"))
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("TERMS_NOT_ACCEPTED"));
+        assertNothingPersisted();
     }
 
     @Test
@@ -156,6 +173,7 @@ class PassengerControllerTest {
                 .param("termsVersion", "2025-01"))
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("TERMS_VERSION_INVALID"));
+        assertNothingPersisted();
     }
 
     @Test
@@ -167,6 +185,7 @@ class PassengerControllerTest {
                 .param("termsVersion", "2026-10"))
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("FACE_PHOTO_REQUIRED"));
+        assertNothingPersisted();
     }
 
     @Test
@@ -179,6 +198,7 @@ class PassengerControllerTest {
                 .param("termsVersion", "2026-10"))
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("FACE_PHOTO_INVALID"));
+        assertNothingPersisted();
     }
 
     @Test
@@ -217,6 +237,9 @@ class PassengerControllerTest {
                 .param("termsVersion", "2026-10"))
             .andExpect(status().isConflict())
             .andExpect(jsonPath("$.code").value("DNI_ALREADY_REGISTERED"));
+        assertEquals(1, passengerAccountRepository.count(), "only the first PassengerAccount");
+        assertEquals(usersBefore + 1, userAccountRepository.count(), "only the first UserAccount");
+        assertEquals(1, storedImageRepository.count(), "only the first StoredImage");
     }
 
     @Test
