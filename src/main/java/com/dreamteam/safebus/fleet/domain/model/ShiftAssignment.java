@@ -68,6 +68,14 @@ public class ShiftAssignment {
         return sa;
     }
 
+    public void activate() {
+        if (this.status != AssignmentStatus.ASSIGNED) {
+            throw new RuleViolationException("ASSIGNMENT_NOT_AVAILABLE",
+                "assignment is not in ASSIGNED status");
+        }
+        this.status = AssignmentStatus.ACTIVE;
+    }
+
     public static boolean overlaps(Instant startA, Instant endA, Instant startB, Instant endB) {
         return startA.isBefore(endB) && startB.isBefore(endA);
     }

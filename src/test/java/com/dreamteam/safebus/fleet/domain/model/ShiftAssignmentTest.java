@@ -59,6 +59,31 @@ class ShiftAssignmentTest {
     }
 
     @Test
+    void activate_fromAssigned_becomesActive() {
+        ShiftAssignment sa = ShiftAssignment.create(1L, 2L, 3L, T1, T2, 99L, FIXED_CLOCK);
+        sa.activate();
+        assertEquals(AssignmentStatus.ACTIVE, sa.getStatus());
+    }
+
+    @Test
+    void activate_fromActive_throwsAssignmentNotAvailable() {
+        ShiftAssignment sa = ShiftAssignment.create(1L, 2L, 3L, T1, T2, 99L, FIXED_CLOCK);
+        sa.activate();
+        RuleViolationException ex = assertThrows(RuleViolationException.class, sa::activate);
+        assertEquals("ASSIGNMENT_NOT_AVAILABLE", ex.code());
+    }
+
+    @Test
+    void activate_fromClosed_throwsAssignmentNotAvailable() throws Exception {
+        ShiftAssignment sa = ShiftAssignment.create(1L, 2L, 3L, T1, T2, 99L, FIXED_CLOCK);
+        var field = ShiftAssignment.class.getDeclaredField("status");
+        field.setAccessible(true);
+        field.set(sa, AssignmentStatus.CLOSED);
+        RuleViolationException ex = assertThrows(RuleViolationException.class, sa::activate);
+        assertEquals("ASSIGNMENT_NOT_AVAILABLE", ex.code());
+    }
+
+    @Test
     void overlaps_identicalPeriods_true() {
         assertTrue(ShiftAssignment.overlaps(T1, T2, T1, T2));
     }

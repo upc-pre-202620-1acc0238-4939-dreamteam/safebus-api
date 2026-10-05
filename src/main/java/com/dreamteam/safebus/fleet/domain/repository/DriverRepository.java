@@ -14,4 +14,8 @@ public interface DriverRepository extends JpaRepository<Driver, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT d FROM Driver d WHERE d.id = :id")
     Optional<Driver> findByIdForUpdate(@Param("id") Long id);
+
+    Optional<Driver> findByQrCredential(String qrCredential);
+
+    Optional<Driver> findByUserAccountId(Long userAccountId);
 }
