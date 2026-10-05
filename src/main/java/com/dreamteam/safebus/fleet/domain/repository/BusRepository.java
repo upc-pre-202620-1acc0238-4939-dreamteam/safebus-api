@@ -13,6 +13,8 @@ public interface BusRepository extends JpaRepository<Bus, Long> {
 
     boolean existsByPlate(String plate);
 
+    Optional<Bus> findByQrCode(String qrCode);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT b FROM Bus b WHERE b.id = :id")
     Optional<Bus> findByIdForUpdate(@Param("id") Long id);

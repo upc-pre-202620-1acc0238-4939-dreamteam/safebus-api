@@ -17,6 +17,9 @@ public class Company {
     @Column(nullable = false, length = 100)
     private String name;
 
+    @Column(nullable = false)
+    private boolean validated;
+
     protected Company() {}
 
     public static Company create(String name) {
@@ -29,9 +32,11 @@ public class Company {
         }
         Company c = new Company();
         c.name = trimmed;
+        c.validated = true;
         return c;
     }
 
     public Long getId() { return id; }
     public String getName() { return name; }
+    public boolean isValidated() { return validated; }
 }
