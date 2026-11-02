@@ -102,6 +102,13 @@ public class PassengerRequestWriterImpl implements PassengerRequestWriter {
 
         Optional<PassengerRequestGroup> openGroup =
             groupRepository.findOpenByShiftIdForUpdate(journey.shiftId());
+        if (openGroup.isPresent() && openGroup.get().isWindowOverdue(now)) {
+            // Flush the expiry before any new group is inserted: Hibernate runs INSERTs before UPDATEs,
+            // and the unique (shift_id, open_marker) constraint would otherwise be violated.
+            openGroup.get().expire();
+            groupRepository.saveAndFlush(openGroup.get());
+            openGroup = Optional.empty();
+        }
 
         // Re-check under the group lock: an identical retry that waited here must see the committed original.
         duplicate = findDuplicate(id, callerUserId, journey, message, activatedAt, sha256);

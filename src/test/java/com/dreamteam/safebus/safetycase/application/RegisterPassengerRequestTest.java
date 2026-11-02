@@ -163,6 +163,77 @@ class RegisterPassengerRequestTest extends AbstractPassengerRequestTest {
     }
 
     @Test
+    void requestExactlyAtTheWindowExpiryDoesNotCountTowardTheOldGroup() {
+        submit(U1, activeJourney(U1));
+        submit(U2, activeJourney(U2));
+        PassengerJourney j3 = activeJourney(U3);
+        clock.advance(Duration.ofMinutes(5));
+
+        RegisterPassengerRequestResult third = submit(U3, j3);
+
+        assertEquals("COUNTED", third.status());
+        assertEquals("COLLECTING", third.groupStatus());
+        assertEquals(1, third.contributorCount());
+        assertEquals(2, groupsOfShift().size());
+        assertEquals(GroupStatus.EXPIRED, groupsOfShift().get(0).getStatus());
+        assertEquals(0, emergencyRepository.count());
+    }
+
+    @Test
+    void lazyExpiryAndTheNewGroupInsertShareOneTransactionWithoutViolatingTheOpenMarkerConstraint() {
+        submit(U1, activeJourney(U1));
+        PassengerJourney j2 = activeJourney(U2);
+        clock.advance(Duration.ofMinutes(6));
+
+        RegisterPassengerRequestResult result = submit(U2, j2);
+
+        assertEquals("COUNTED", result.status());
+        assertEquals(2, groupsOfShift().size());
+        PassengerRequestGroup expired = groupsOfShift().get(0);
+        PassengerRequestGroup fresh = groupsOfShift().get(1);
+        assertEquals(GroupStatus.EXPIRED, expired.getStatus());
+        assertNull(expired.getOpenMarker());
+        assertEquals(GroupStatus.COLLECTING, fresh.getStatus());
+        assertEquals(1, fresh.getOpenMarker());
+        assertEquals(fresh.getId(), requestRepository.findById(result.requestId()).orElseThrow().getGroupId());
+    }
+
+    @Test
+    void afterAGroupExpiresTheNewGroupCountsOnlyTheNewRequestAndKeepsTheOldRequests() {
+        PassengerJourney j1 = activeJourney(U1);
+        RegisterPassengerRequestResult first = submit(U1, j1);
+        RegisterPassengerRequestResult second = submit(U2, activeJourney(U2));
+        clock.advance(Duration.ofMinutes(5).plusSeconds(1));
+
+        RegisterPassengerRequestResult later = submit(U1, j1);
+
+        assertEquals("COUNTED", later.status());
+        assertEquals("COLLECTING", later.groupStatus());
+        assertEquals(1, later.contributorCount());
+        Long oldGroupId = groupsOfShift().get(0).getId();
+        assertEquals(oldGroupId, requestRepository.findById(first.requestId()).orElseThrow().getGroupId());
+        assertEquals(oldGroupId, requestRepository.findById(second.requestId()).orElseThrow().getGroupId());
+        assertEquals(RequestStatus.COUNTED, requestRepository.findById(first.requestId()).orElseThrow().getStatus());
+        assertEquals(0, emergencyRepository.count());
+    }
+
+    @Test
+    void identicalRetryAfterTheWindowPassedIsAnsweredFromTheStoredRequestAndChangesNothing() {
+        PassengerJourney journey = activeJourney(U1);
+        as(U1);
+        RegisterPassengerRequestCommand command = valid(journey);
+        service.register(command);
+        clock.advance(Duration.ofMinutes(6));
+        State before = state();
+
+        RegisterPassengerRequestResult retry = service.register(command);
+
+        assertTrue(retry.duplicate());
+        assertEquals("COUNTED", retry.status());
+        assertEquals(before, state());
+    }
+
+    @Test
     void messageOfExactly500CharactersAndPhotoOfExactly5MiBAreAccepted() {
         PassengerJourney journey = activeJourney(U1);
         as(U1);
