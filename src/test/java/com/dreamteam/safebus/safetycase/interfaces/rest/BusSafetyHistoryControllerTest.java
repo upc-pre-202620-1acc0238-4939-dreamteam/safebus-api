@@ -156,7 +156,7 @@ class BusSafetyHistoryControllerTest {
         for (int i = 0; i < expected.size(); i++) {
             Map<?, ?> item = (Map<?, ?>) items.get(i);
             Emergency emergency = expected.get(i);
-            assertEquals(Set.of("reference", "source", "recordedAt", "state"), item.keySet());
+            assertEquals(Set.of("reference", "source", "recordedAt", "state", "stateLabel"), item.keySet());
             assertEquals(PublicReference.of(emergency.getId()), item.get("reference"));
             assertTrue(item.get("reference").toString().matches("EM-[0-9A-F]{8}"));
             assertEquals("DRIVER", item.get("source"));

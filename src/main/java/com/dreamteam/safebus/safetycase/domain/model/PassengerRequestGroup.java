@@ -15,6 +15,7 @@ import jakarta.persistence.Version;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.UUID;
 
 @Entity
 @Table(uniqueConstraints = @UniqueConstraint(columnNames = {"shift_id", "open_marker"}))
@@ -64,6 +65,10 @@ public class PassengerRequestGroup {
     @Column(name = "open_marker")
     private Integer openMarker;
 
+    // Nullable so groups created before the column existed stay valid; the unique index allows several NULLs.
+    @Column(name = "public_reference", length = 36, unique = true)
+    private String publicReference;
+
     @Version
     private Long version;
 
@@ -78,6 +83,7 @@ public class PassengerRequestGroup {
         g.windowStartedAt = now.truncatedTo(ChronoUnit.MILLIS);
         g.windowExpiresAt = g.windowStartedAt.plus(PassengerRequestPolicy.WINDOW);
         g.openMarker = 1;
+        g.publicReference = UUID.randomUUID().toString();
         return g;
     }
 
@@ -158,5 +164,6 @@ public class PassengerRequestGroup {
     public Instant getDecidedAt() { return decidedAt; }
     public String getDecisionReason() { return decisionReason; }
     public String getUserResponse() { return userResponse; }
+    public String getPublicReference() { return publicReference; }
     public Long getVersion() { return version; }
 }

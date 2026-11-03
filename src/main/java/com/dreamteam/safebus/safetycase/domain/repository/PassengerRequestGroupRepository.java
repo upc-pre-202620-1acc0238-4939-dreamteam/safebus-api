@@ -30,5 +30,7 @@ public interface PassengerRequestGroupRepository extends JpaRepository<Passenger
 
     List<PassengerRequestGroup> findByShiftIdOrderByIdAsc(Long shiftId);
 
+    List<PassengerRequestGroup> findByBusIdAndShiftIdOrderByIdAsc(Long busId, Long shiftId);
+
     List<PassengerRequestGroup> findByCompanyIdAndStatus(Long companyId, GroupStatus status);
 }

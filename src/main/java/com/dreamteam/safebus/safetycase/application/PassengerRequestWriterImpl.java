@@ -73,16 +73,17 @@ public class PassengerRequestWriterImpl implements PassengerRequestWriter {
 
         Long callerUserId = currentUserProvider.current().userId();
         PassengerContextFacade.JourneyView journey = findOwnJourney(callerUserId, command.journeyId());
-        if (ENDED.equals(journey.status()) && activatedAt.isAfter(journey.endedAt())) {
-            throw new RuleViolationException("ACTIVATION_AFTER_JOURNEY_END",
-                "activatedAt must not be after the end of the journey");
-        }
 
         String sha256 = sha256Of(command.photo());
         Optional<RegisterPassengerRequestResult> duplicate =
             findDuplicate(id, callerUserId, journey, message, activatedAt, sha256);
         if (duplicate.isPresent()) {
             return duplicate.get();
+        }
+        // After the duplicate lookup: a retry of a request accepted before the end keeps its original answer.
+        if (ENDED.equals(journey.status()) && activatedAt.isAfter(journey.endedAt())) {
+            throw new RuleViolationException("ACTIVATION_AFTER_JOURNEY_END",
+                "activatedAt must not be after the end of the journey");
         }
 
         Long companyId = fleetFacade.findBusCompanyId(journey.busId())

@@ -23,8 +23,6 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -129,17 +127,14 @@ class GetBusSafetyHistoryQueryServiceTest {
         List<Emergency> expected = seedHistory();
         Snapshot before = snapshot();
 
-        var result = service.getForBus(busId);
+        var result = service.getForBus(String.valueOf(busId), null);
 
         assertEquals(busId, result.busId());
         assertEquals(SHIFT_ID, result.shiftId());
         assertNull(result.message());
         assertEquals(expected.stream().map(e -> new GetBusSafetyHistoryResult.Item(
-            PublicReference.of(e.getId()), "DRIVER", e.getReceivedAt(), e.getStatus().name())).toList(), result.items());
-        Map<?, ?> body = objectMapper.readValue(objectMapper.writeValueAsString(result), Map.class);
-        for (Object item : (List<?>) body.get("items")) {
-            assertEquals(Set.of("reference", "source", "recordedAt", "state"), ((Map<?, ?>) item).keySet());
-        }
+            PublicReference.of(e.getId()), "DRIVER", e.getReceivedAt(), e.getStatus().name(),
+            PassengerRequestProgress.valueOf(e.getStatus().name()).label(), null)).toList(), result.items());
         String json = objectMapper.writeValueAsString(result);
         emergencyIds.forEach(id -> assertFalse(json.contains(id)));
         assertFalse(json.contains(OUTCOME));
@@ -152,7 +147,7 @@ class GetBusSafetyHistoryQueryServiceTest {
         journey(USER_ID, busId, false);
         Snapshot before = snapshot();
 
-        var result = service.getForBus(busId);
+        var result = service.getForBus(String.valueOf(busId), null);
 
         assertEquals(busId, result.busId());
         assertEquals(SHIFT_ID, result.shiftId());
@@ -168,7 +163,7 @@ class GetBusSafetyHistoryQueryServiceTest {
         emergency(busId, SHIFT_ID + 1, 20, EmergencyStatus.ACTIVE);
         Snapshot before = snapshot();
 
-        var result = service.getForBus(busId);
+        var result = service.getForBus(String.valueOf(busId), null);
 
         assertTrue(result.items().isEmpty());
         assertEquals("No reports are recorded for this bus and shift.", result.message());
@@ -217,7 +212,7 @@ class GetBusSafetyHistoryQueryServiceTest {
 
     private ForbiddenOperationException denied(Long requestedBusId) {
         Snapshot before = snapshot();
-        var exception = assertThrows(ForbiddenOperationException.class, () -> service.getForBus(requestedBusId));
+        var exception = assertThrows(ForbiddenOperationException.class, () -> service.getForBus(String.valueOf(requestedBusId), null));
         assertEquals("BUS_ACCESS_DENIED", exception.code());
         assertEquals("access denied", exception.getMessage());
         assertUnchanged(before);

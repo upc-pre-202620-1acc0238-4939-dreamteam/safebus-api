@@ -1,5 +1,6 @@
 package com.dreamteam.safebus.safetycase.application;
 
+import com.dreamteam.safebus.passenger.domain.model.JourneyEndReason;
 import com.dreamteam.safebus.passenger.domain.model.PassengerJourney;
 import com.dreamteam.safebus.safetycase.domain.model.GroupStatus;
 import com.dreamteam.safebus.safetycase.domain.model.PassengerRequest;
@@ -382,6 +383,26 @@ class RegisterPassengerRequestTest extends AbstractPassengerRequestTest {
 
         assertRejected(RuleViolationException.class, "ACTIVATION_AFTER_JOURNEY_END",
             command(ended, UUID.randomUUID().toString(), "m", clock.instant().minusSeconds(119), PHOTO));
+    }
+
+    @Test
+    void aRetryOfARequestAcceptedBeforeAnEarlierReportedEndIsAnsweredFromTheStoredRequest() {
+        PassengerJourney journey = activeJourney(U1);
+        clock.advance(Duration.ofMinutes(5));
+        RegisterPassengerRequestCommand command = valid(journey);
+        as(U1);
+        RegisterPassengerRequestResult first = service.register(command);
+        journey.end(JourneyEndReason.AUTOMATIC_SEPARATION, command.activatedAt().minusSeconds(10), null,
+            clock.instant());
+        journeyRepository.saveAndFlush(journey);
+        State before = state();
+
+        RegisterPassengerRequestResult retry = service.register(command);
+
+        assertTrue(retry.duplicate());
+        assertEquals(first.requestId(), retry.requestId());
+        assertEquals(first.status(), retry.status());
+        assertEquals(before, state());
     }
 
     @Test

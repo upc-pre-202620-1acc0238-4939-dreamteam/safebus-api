@@ -10,6 +10,7 @@ import java.time.temporal.ChronoUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -33,6 +34,15 @@ class PassengerRequestGroupTest {
         assertEquals(1, g.getOpenMarker());
         assertNull(g.getAwaitingSince());
         assertEquals(g.getWindowStartedAt().plus(5, ChronoUnit.MINUTES), g.getWindowExpiresAt());
+    }
+
+    @Test
+    void open_assignsARandomUuidAsThePublicReference() {
+        PassengerRequestGroup first = open();
+        PassengerRequestGroup second = open();
+
+        assertEquals(first.getPublicReference(), java.util.UUID.fromString(first.getPublicReference()).toString());
+        assertNotEquals(first.getPublicReference(), second.getPublicReference());
     }
 
     @Test
