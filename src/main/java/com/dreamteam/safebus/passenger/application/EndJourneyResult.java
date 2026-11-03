@@ -2,7 +2,9 @@ package com.dreamteam.safebus.passenger.application;
 
 import com.dreamteam.safebus.passenger.domain.model.JourneyEndReason;
 import com.dreamteam.safebus.passenger.domain.model.JourneyStatus;
+import com.dreamteam.safebus.passenger.domain.model.SeparationSummary;
 
 import java.time.Instant;
 
-public record EndJourneyResult(Long journeyId, JourneyStatus status, Instant endedAt, JourneyEndReason endReason) {}
+public record EndJourneyResult(Long journeyId, JourneyStatus status, Instant endedAt, JourneyEndReason endReason,
+                               SeparationSummary summary) {}
