@@ -55,6 +55,29 @@ class PassengerRequestGroupRepositoryTest {
     }
 
     @Test
+    void twoGroupsWithTheSamePublicReferenceViolateTheUniqueIndex() {
+        PassengerRequestGroup first = save(SHIFT, NOW.minusSeconds(900), GroupStatus.EXPIRED);
+
+        PassengerRequestGroup clash = PassengerRequestGroup.open(1L, 2L, SHIFT, NOW.minusSeconds(800));
+        ReflectionTestUtils.setField(clash, "publicReference", first.getPublicReference());
+        clash.expire();
+
+        assertThrows(DataIntegrityViolationException.class, () -> repository.saveAndFlush(clash));
+    }
+
+    @Test
+    void groupsWithoutAPublicReferenceCanCoexist() {
+        for (int i = 0; i < 2; i++) {
+            PassengerRequestGroup legacy = PassengerRequestGroup.open(1L, 2L, SHIFT, NOW.minusSeconds(900L - i));
+            ReflectionTestUtils.setField(legacy, "publicReference", null);
+            legacy.expire();
+            repository.saveAndFlush(legacy);
+        }
+
+        assertEquals(2, repository.findByShiftIdOrderByIdAsc(SHIFT).size());
+    }
+
+    @Test
     void anOpenGroupAndAnyNumberOfClosedGroupsCanCoexistOnOneShift() {
         save(SHIFT, NOW.minusSeconds(900), GroupStatus.EXPIRED);
         save(SHIFT, NOW.minusSeconds(800), GroupStatus.EXPIRED);
