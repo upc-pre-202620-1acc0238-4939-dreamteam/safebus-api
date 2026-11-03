@@ -85,6 +85,7 @@ public abstract class AbstractPassengerRequestTest {
 
     @AfterEach
     void deleteFixture() {
+        jdbcTemplate.update("delete from emergency where shift_id = ?", shift.getId());
         requestRepository.deleteAll();
         groupRepository.deleteAll(groupRepository.findByShiftIdOrderByIdAsc(shift.getId()));
         journeyRepository.deleteAllById(journeyIds);
@@ -118,6 +119,9 @@ public abstract class AbstractPassengerRequestTest {
         ReflectionTestUtils.setField(group, "status", status);
         if (!status.isOpen()) {
             ReflectionTestUtils.setField(group, "openMarker", null);
+        }
+        if (status == GroupStatus.AWAITING_APPROVAL || status == GroupStatus.APPROVED) {
+            ReflectionTestUtils.setField(group, "awaitingSince", clock.instant());
         }
         return groupRepository.saveAndFlush(group);
     }
