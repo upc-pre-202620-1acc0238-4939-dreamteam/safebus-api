@@ -85,6 +85,7 @@ public abstract class AbstractPassengerRequestTest {
 
     @AfterEach
     void deleteFixture() {
+        jdbcTemplate.update("delete from emergency where shift_id = ?", shift.getId());
         requestRepository.deleteAll();
         groupRepository.deleteAll(groupRepository.findByShiftIdOrderByIdAsc(shift.getId()));
         journeyRepository.deleteAllById(journeyIds);
