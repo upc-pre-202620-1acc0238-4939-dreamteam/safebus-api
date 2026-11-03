@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.util.Optional;
 
 @Service
 public class ImageStoragePortImpl implements ImageStoragePort {
@@ -25,5 +26,14 @@ public class ImageStoragePortImpl implements ImageStoragePort {
     @Transactional(propagation = Propagation.MANDATORY)
     public Long store(byte[] content, String contentType) {
         return repository.saveAndFlush(StoredImage.create(content, contentType, clock)).getId();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<LoadedImage> load(Long imageId) {
+        if (imageId == null) {
+            return Optional.empty();
+        }
+        return repository.findById(imageId).map(i -> new LoadedImage(i.getContentType(), i.getData()));
     }
 }

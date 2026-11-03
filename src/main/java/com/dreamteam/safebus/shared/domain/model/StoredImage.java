@@ -45,5 +45,6 @@ public class StoredImage {
     public Long getId() { return id; }
     public String getContentType() { return contentType; }
     public int getSizeBytes() { return sizeBytes; }
+    public byte[] getData() { return data.clone(); }
     public Instant getCreatedAt() { return createdAt; }
 }
