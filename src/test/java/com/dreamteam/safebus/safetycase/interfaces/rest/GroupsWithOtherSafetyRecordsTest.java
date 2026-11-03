@@ -7,12 +7,15 @@ import com.dreamteam.safebus.safetycase.domain.model.Emergency;
 import com.dreamteam.safebus.safetycase.domain.model.EmergencyStatus;
 import com.dreamteam.safebus.safetycase.domain.model.GroupStatus;
 import com.dreamteam.safebus.safetycase.domain.model.PassengerRequestGroup;
+import com.dreamteam.safebus.safetycase.domain.model.RequestStatus;
+import com.dreamteam.safebus.safetycase.support.TestImages;
 import com.dreamteam.safebus.safetycase.support.AbstractPassengerRequestTest;
 import com.dreamteam.safebus.trip.domain.model.ShiftStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -25,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -73,6 +77,18 @@ class GroupsWithOtherSafetyRecordsTest extends AbstractPassengerRequestTest {
         assertEquals(ShiftStatus.CLOSED, shift.getStatus());
         assertEquals(AssignmentStatus.CLOSED,
             assignmentRepository.findById(shift.getAssignmentId()).orElseThrow().getStatus());
+    }
+
+    private void submitPassengerRequest(long userId) throws Exception {
+        mockMvc.perform(multipart("/api/v1/passenger-requests")
+                .file(new MockMultipartFile("photo", "evidence.jpg", "image/jpeg", TestImages.jpeg(5)))
+                .param("id", UUID.randomUUID().toString())
+                .param("journeyId", String.valueOf(activeJourney(userId).getId()))
+                .param("message", "Danger on board")
+                .param("activatedAt", clock.instant().minusSeconds(5).toString())
+                .with(jwt().jwt(b -> b.subject(String.valueOf(userId)).claim("role", "PASSENGER"))
+                    .authorities(new SimpleGrantedAuthority("ROLE_PASSENGER"))))
+            .andExpect(status().isCreated());
     }
 
     private PassengerRequestGroup reload(PassengerRequestGroup group) {
@@ -184,7 +200,7 @@ class GroupsWithOtherSafetyRecordsTest extends AbstractPassengerRequestTest {
     }
 
     @Test
-    void closingTheShiftDoesNotLetTheExpiryJobTouchAnAwaitingOrApprovedGroup() throws Exception {
+    void closingTheShiftDoesNotLetTheExpiryJobTouchAnAwaitingGroup() throws Exception {
         PassengerRequestGroup awaiting = groupInStatus(GroupStatus.AWAITING_APPROVAL);
         closeShiftThroughTheEndpoint();
         clock.advance(Duration.ofDays(2));
@@ -194,5 +210,41 @@ class GroupsWithOtherSafetyRecordsTest extends AbstractPassengerRequestTest {
         assertEquals(0, expired);
         assertEquals(GroupStatus.AWAITING_APPROVAL, reload(awaiting).getStatus());
         assertEquals(1, reload(awaiting).getOpenMarker());
+    }
+
+    @Test
+    void aDriverPanicWhileAGroupIsCollectingIsCriticalAndLeavesTheGroupAndItsContributorsUntouched()
+            throws Exception {
+        submitPassengerRequest(76101L);
+        submitPassengerRequest(76102L);
+        PassengerRequestGroup group = groupsOfShift().getFirst();
+        assertEquals(GroupStatus.COLLECTING, group.getStatus());
+        assertEquals(2, requestRepository.countByGroupIdAndStatus(group.getId(), RequestStatus.COUNTED));
+
+        String id = panic();
+
+        Emergency driverEmergency = emergencyRepository.findById(id).orElseThrow();
+        assertEquals(EmergencyStatus.ACTIVE, driverEmergency.getStatus());
+        assertNull(driverEmergency.getGroupId());
+        assertEquals(1, groupsOfShift().size());
+        PassengerRequestGroup stored = reload(group);
+        assertEquals(GroupStatus.COLLECTING, stored.getStatus());
+        assertEquals(1, stored.getOpenMarker());
+        assertEquals(group.getVersion(), stored.getVersion());
+        assertEquals(2, requestRepository.countByGroupIdAndStatus(group.getId(), RequestStatus.COUNTED));
+        assertEquals(0, requestRepository.countByGroupIdAndStatus(group.getId(), RequestStatus.ATTACHED));
+    }
+
+    @Test
+    void theExpiryJobNeverTouchesAnApprovedGroupOlderThanTheWindow() {
+        PassengerRequestGroup approved = groupInStatus(GroupStatus.APPROVED);
+        clock.advance(Duration.ofDays(2));
+
+        int expired = expireOverdueGroups.expire();
+
+        assertEquals(0, expired);
+        PassengerRequestGroup stored = reload(approved);
+        assertEquals(GroupStatus.APPROVED, stored.getStatus());
+        assertEquals(1, stored.getOpenMarker());
     }
 }
