@@ -14,4 +14,6 @@ public interface PassengerRequestRepository extends JpaRepository<PassengerReque
     long countByGroupIdAndStatus(Long groupId, RequestStatus status);
 
     List<PassengerRequest> findByGroupIdIn(Collection<Long> groupIds);
+
+    List<PassengerRequest> findByPassengerUserIdOrderByReceivedAtDescIdDesc(Long passengerUserId);
 }
