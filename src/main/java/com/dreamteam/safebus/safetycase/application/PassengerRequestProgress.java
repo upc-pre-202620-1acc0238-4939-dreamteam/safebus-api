@@ -1,5 +1,22 @@
 package com.dreamteam.safebus.safetycase.application;
 
 public enum PassengerRequestProgress {
-    LATE, COLLECTING, AWAITING_APPROVAL, EXPIRED, NOT_APPROVED, ACTIVE, IN_PROGRESS, CLOSED
+    LATE("Late"),
+    COLLECTING("Collecting requests"),
+    AWAITING_APPROVAL("Awaiting company approval"),
+    EXPIRED("Expired"),
+    NOT_APPROVED("Not approved"),
+    ACTIVE("Active"),
+    IN_PROGRESS("In progress"),
+    CLOSED("Closed");
+
+    private final String label;
+
+    PassengerRequestProgress(String label) {
+        this.label = label;
+    }
+
+    public String label() {
+        return label;
+    }
 }

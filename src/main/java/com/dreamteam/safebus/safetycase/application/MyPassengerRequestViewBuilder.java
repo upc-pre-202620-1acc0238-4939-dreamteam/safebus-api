@@ -45,27 +45,7 @@ class MyPassengerRequestViewBuilder {
         int contributors = (int) requestRepository.countByGroupIdAndStatus(group.getId(), RequestStatus.COUNTED);
         return new MyPassengerRequestResult(request.getId(), request.getMessage(), evidence,
             request.getReceivedAt(), PublicReference.ofGroup(group.getId(), group.getPublicReference()),
-            contributors, progressOf(group, emergency), decisionOf(group, emergency));
-    }
-
-    // The expiry job runs every 30 seconds, so an overdue collecting group is reported as expired already.
-    private PassengerRequestProgress progressOf(PassengerRequestGroup group, Optional<Emergency> emergency) {
-        if (emergency.isPresent()) {
-            return switch (emergency.get().getStatus()) {
-                case ACTIVE -> PassengerRequestProgress.ACTIVE;
-                case IN_PROGRESS -> PassengerRequestProgress.IN_PROGRESS;
-                case CLOSED -> PassengerRequestProgress.CLOSED;
-            };
-        }
-        return switch (group.getStatus()) {
-            case COLLECTING -> group.isWindowOverdue(Instant.now(clock))
-                ? PassengerRequestProgress.EXPIRED : PassengerRequestProgress.COLLECTING;
-            case AWAITING_APPROVAL -> PassengerRequestProgress.AWAITING_APPROVAL;
-            case EXPIRED -> PassengerRequestProgress.EXPIRED;
-            case NOT_APPROVED -> PassengerRequestProgress.NOT_APPROVED;
-            case APPROVED -> PassengerRequestProgress.ACTIVE;
-            case CLOSED -> PassengerRequestProgress.CLOSED;
-        };
+            contributors, GroupProgress.of(group, emergency, Instant.now(clock)), decisionOf(group, emergency));
     }
 
     // The group's decision_reason is internal and never leaves this method.
