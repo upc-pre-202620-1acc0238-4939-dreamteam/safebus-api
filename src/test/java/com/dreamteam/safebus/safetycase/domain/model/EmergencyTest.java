@@ -262,4 +262,60 @@ class EmergencyTest {
         Instant sameMillis = ACTIVATED.truncatedTo(ChronoUnit.MILLIS);
         assertTrue(base().hasSamePayloadAs(10L, 30L, sameMillis, -12.046, -77.042));
     }
+
+    // --- activateByPassengerGroup ---
+
+    private Emergency fromGroup() {
+        return Emergency.activateByPassengerGroup(
+            "6f1c1d52-0f6e-4c37-9d3e-5d6d0c5b7a11", 100L, 20L, 30L, 40L, 55L, FIXED);
+    }
+
+    @Test
+    void activateByPassengerGroup_isHighPriorityAndActiveFromAPassengerGroup() {
+        Emergency e = fromGroup();
+        assertEquals(EmergencySource.PASSENGER_GROUP, e.getSource());
+        assertEquals(EmergencyPriority.HIGH, e.getPriority());
+        assertEquals(EmergencyStatus.ACTIVE, e.getStatus());
+    }
+
+    @Test
+    void activateByPassengerGroup_linksTheGroupAndTheBusShiftRouteOfTheCompany() {
+        Emergency e = fromGroup();
+        assertEquals(55L, e.getGroupId());
+        assertEquals(100L, e.getCompanyId());
+        assertEquals(20L, e.getBusId());
+        assertEquals(30L, e.getShiftId());
+        assertEquals(40L, e.getRouteId());
+    }
+
+    @Test
+    void activateByPassengerGroup_hasNoDriverNoLocationAndNoAttentionYet() {
+        Emergency e = fromGroup();
+        assertNull(e.getDriverId());
+        assertNull(e.getPoint());
+        assertNull(e.getResponsibleSupervisorUserId());
+        assertNull(e.getAttentionStartedAt());
+        assertNull(e.getClosedAt());
+    }
+
+    @Test
+    void activateByPassengerGroup_stampsActivationAndReceiptWithTheClockTruncatedToMillis() {
+        Emergency e = fromGroup();
+        Instant expected = NOW.truncatedTo(ChronoUnit.MILLIS);
+        assertEquals(expected, e.getActivatedAt());
+        assertEquals(expected, e.getReceivedAt());
+    }
+
+    @Test
+    void activateByPassengerGroup_canBeAttendedAndClosedLikeAnyEmergency() {
+        Emergency e = fromGroup();
+        e.startAttention(9L, NOW);
+        e.close("resolved", null, NOW);
+        assertEquals(EmergencyStatus.CLOSED, e.getStatus());
+    }
+
+    @Test
+    void activateByDriver_hasNoGroup() {
+        assertNull(base().getGroupId());
+    }
 }

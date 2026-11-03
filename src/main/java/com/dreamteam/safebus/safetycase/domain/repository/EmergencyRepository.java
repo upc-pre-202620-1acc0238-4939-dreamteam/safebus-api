@@ -14,6 +14,8 @@ import java.util.Optional;
 
 public interface EmergencyRepository extends JpaRepository<Emergency, String> {
 
+    Optional<Emergency> findByGroupId(Long groupId);
+
     List<Emergency> findByBusIdAndShiftIdOrderByReceivedAtDesc(Long busId, Long shiftId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

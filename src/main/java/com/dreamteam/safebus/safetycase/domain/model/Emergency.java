@@ -12,7 +12,9 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.PostLoad;
+import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 import org.springframework.data.domain.Persistable;
 
@@ -20,7 +22,9 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
+// a group can have at most one emergency; driver emergencies leave group_id null and never collide
 @Entity
+@Table(uniqueConstraints = @UniqueConstraint(columnNames = "group_id"))
 public class Emergency implements Persistable<String> {
 
     @Id
@@ -55,6 +59,9 @@ public class Emergency implements Persistable<String> {
 
     @Column
     private Long driverId;
+
+    @Column
+    private Long groupId;
 
     @Column(nullable = false)
     private Long busId;
@@ -122,6 +129,24 @@ public class Emergency implements Persistable<String> {
         return e;
     }
 
+    public static Emergency activateByPassengerGroup(String id, Long companyId, Long busId, Long shiftId,
+                                                      Long routeId, Long groupId, Clock clock) {
+        Emergency e = new Emergency();
+        Instant now = Instant.now(clock).truncatedTo(ChronoUnit.MILLIS);
+        e.id = id;
+        e.companyId = companyId;
+        e.source = EmergencySource.PASSENGER_GROUP;
+        e.priority = EmergencyPriority.HIGH;
+        e.status = EmergencyStatus.ACTIVE;
+        e.groupId = groupId;
+        e.busId = busId;
+        e.shiftId = shiftId;
+        e.routeId = routeId;
+        e.activatedAt = now;
+        e.receivedAt = now;
+        return e;
+    }
+
     public void startAttention(Long supervisorUserId, Instant now) {
         if (status != EmergencyStatus.ACTIVE) {
             throw new ConflictException("INVALID_TRANSITION",
@@ -181,6 +206,7 @@ public class Emergency implements Persistable<String> {
     public EmergencyPriority getPriority() { return priority; }
     public EmergencyStatus getStatus() { return status; }
     public Long getDriverId() { return driverId; }
+    public Long getGroupId() { return groupId; }
     public Long getBusId() { return busId; }
     public Long getShiftId() { return shiftId; }
     public Long getRouteId() { return routeId; }
