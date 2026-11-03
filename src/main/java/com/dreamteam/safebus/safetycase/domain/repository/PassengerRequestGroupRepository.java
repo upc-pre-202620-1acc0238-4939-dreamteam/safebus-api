@@ -1,5 +1,6 @@
 package com.dreamteam.safebus.safetycase.domain.repository;
 
+import com.dreamteam.safebus.safetycase.domain.model.GroupStatus;
 import com.dreamteam.safebus.safetycase.domain.model.PassengerRequestGroup;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -28,4 +29,6 @@ public interface PassengerRequestGroupRepository extends JpaRepository<Passenger
     List<PassengerRequestGroup> findOverdueCollectingForUpdate(@Param("now") Instant now);
 
     List<PassengerRequestGroup> findByShiftIdOrderByIdAsc(Long shiftId);
+
+    List<PassengerRequestGroup> findByCompanyIdAndStatus(Long companyId, GroupStatus status);
 }

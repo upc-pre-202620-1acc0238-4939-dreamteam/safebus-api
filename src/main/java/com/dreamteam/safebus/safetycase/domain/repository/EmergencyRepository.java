@@ -1,6 +1,7 @@
 package com.dreamteam.safebus.safetycase.domain.repository;
 
 import com.dreamteam.safebus.safetycase.domain.model.Emergency;
+import com.dreamteam.safebus.safetycase.domain.model.EmergencySource;
 import com.dreamteam.safebus.safetycase.domain.model.EmergencyStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -24,4 +25,7 @@ public interface EmergencyRepository extends JpaRepository<Emergency, String> {
 
     List<Emergency> findByCompanyIdAndStatusInOrderByReceivedAtDesc(Long companyId,
                                                                     Collection<EmergencyStatus> statuses);
+
+    List<Emergency> findByCompanyIdAndSourceAndStatusIn(Long companyId, EmergencySource source,
+                                                        Collection<EmergencyStatus> statuses);
 }
