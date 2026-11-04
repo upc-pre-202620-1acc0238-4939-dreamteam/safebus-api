@@ -3,6 +3,7 @@ package com.dreamteam.safebus.trip.interfaces.rest;
 import com.dreamteam.safebus.trip.application.InitializeOccupancyCommand;
 import com.dreamteam.safebus.trip.application.OccupancyCommandService;
 import com.dreamteam.safebus.trip.application.RecordHeartbeatCommand;
+import com.dreamteam.safebus.trip.application.RecordOccupancyEventCommand;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -58,5 +59,22 @@ public class OccupancyDeviceController {
     public OccupancyHeartbeatResource heartbeat(@Valid @RequestBody RecordHeartbeatRequest request) {
         var result = commandService.heartbeat(new RecordHeartbeatCommand(request.busId()));
         return new OccupancyHeartbeatResource(result.busId(), result.receivedAt());
+    }
+
+    @PostMapping("/occupancy-events")
+    @Operation(summary = "Report one passenger entry or exit, in strict sequence")
+    @ApiResponse(responseCode = "201", description = "Event applied; the resulting count is returned")
+    @ApiResponse(responseCode = "200", description = "Identical retry; nothing changed")
+    @ApiResponse(responseCode = "401", description = "No credential provided")
+    @ApiResponse(responseCode = "403", description = "OCCUPANCY_SOURCE_NOT_AUTHORIZED — key, bus or shift refused")
+    @ApiResponse(responseCode = "409", description = "SEQUENCE_GAP (with expectedSequence), EVENT_ID_REUSED or SEQUENCE_ALREADY_APPLIED")
+    @ApiResponse(responseCode = "422", description = "Malformed request, NEGATIVE_COUNT, OCCUPANCY_NOT_INITIALIZED, OCCUPANCY_INCONSISTENT or INVALID_CAPTURE_TIME")
+    public ResponseEntity<OccupancyEventResource> recordEvent(@Valid @RequestBody RecordOccupancyEventRequest request) {
+        var result = commandService.recordEvent(new RecordOccupancyEventCommand(
+            request.eventId().toLowerCase(Locale.ROOT), request.busId(), request.shiftId(),
+            request.sequence(), request.type(), request.capturedAt()));
+        var resource = new OccupancyEventResource(result.eventId(), result.sequence(), result.type(),
+            result.count(), result.load());
+        return ResponseEntity.status(result.duplicate() ? HttpStatus.OK : HttpStatus.CREATED).body(resource);
     }
 }

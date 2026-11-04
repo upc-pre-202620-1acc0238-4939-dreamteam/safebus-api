@@ -38,7 +38,7 @@ public record OccupancyAssessment(OccupancyStatus status, UnavailableReason reas
         return new OccupancyAssessment(OccupancyStatus.UNAVAILABLE, reason, null, null);
     }
 
-    private static OccupancyLoad loadOf(Integer count, Integer capacity) {
+    public static OccupancyLoad loadOf(Integer count, Integer capacity) {
         if (count == null) {
             return null;
         }
