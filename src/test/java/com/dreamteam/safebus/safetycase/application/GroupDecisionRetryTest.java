@@ -14,6 +14,7 @@ import java.time.Instant;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -32,6 +33,7 @@ class GroupDecisionRetryTest {
     @Autowired ApproveGroupCommandService approveService;
     @Autowired DeclineGroupCommandService declineService;
     @MockitoBean GroupDecisionWriter writer;
+    @MockitoBean SupervisorNotifier notifier;
 
     @Test
     void approveRetriesOnceAfterAConstraintViolation() {
@@ -39,6 +41,26 @@ class GroupDecisionRetryTest {
 
         assertEquals(APPROVED, approveService.approve(APPROVE));
         verify(writer, times(2)).approve(any());
+    }
+
+    @Test
+    void approvalIsAnnouncedOnceEvenWhenTheFirstAttemptNeededARetry() {
+        when(writer.approve(any())).thenThrow(new DataIntegrityViolationException("simulated")).thenReturn(APPROVED);
+
+        approveService.approve(APPROVE);
+
+        verify(notifier, times(1)).groupApproved(1L, "e1");
+    }
+
+    @Test
+    void aReplayedApprovalIsNotAnnouncedAgain() {
+        ApproveGroupResult replay = new ApproveGroupResult(1L, "e1", "APPROVED", "HIGH",
+            Instant.parse("2030-01-01T10:00:00Z"), true);
+        when(writer.approve(any())).thenReturn(replay);
+
+        approveService.approve(APPROVE);
+
+        verify(notifier, never()).groupApproved(any(), any());
     }
 
     @Test

@@ -9,16 +9,23 @@ import org.springframework.stereotype.Service;
 public class RegisterPassengerRequest {
 
     private final PassengerRequestWriter writer;
+    private final SupervisorNotifier notifier;
 
-    public RegisterPassengerRequest(PassengerRequestWriter writer) {
+    public RegisterPassengerRequest(PassengerRequestWriter writer, SupervisorNotifier notifier) {
         this.writer = writer;
+        this.notifier = notifier;
     }
 
     public RegisterPassengerRequestResult register(RegisterPassengerRequestCommand command) {
+        RegisterPassengerRequestResult result;
         try {
-            return writer.write(command);
+            result = writer.write(command);
         } catch (DataIntegrityViolationException | ObjectOptimisticLockingFailureException ex) {
-            return writer.write(command); // retry once in a new transaction
+            result = writer.write(command); // retry once in a new transaction
         }
+        if (!result.duplicate() && result.reviewRequired()) {
+            notifier.groupReviewRequired(result.groupId());
+        }
+        return result;
     }
 }

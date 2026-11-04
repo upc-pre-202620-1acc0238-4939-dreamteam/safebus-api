@@ -224,6 +224,30 @@ class ReviewQueueControllerTest extends AbstractPassengerRequestTest {
     }
 
     @Test
+    void aGroupReferenceIsItsStoredPublicReference() throws Exception {
+        submitRequest(U1);
+        submitRequest(U2);
+        submitRequest(U3);
+        PassengerRequestGroup group = groupsOfShift().getFirst();
+
+        queue().andExpect(status().isOk())
+            .andExpect(jsonPath("$.groupsAwaitingApproval[0].reference").value(group.getPublicReference()));
+    }
+
+    @Test
+    void aLegacyGroupWithoutStoredReferenceGetsTheDerivedStableReference() throws Exception {
+        PassengerRequestGroup legacy = extraAwaitingGroup(shift.getId(), clock.instant());
+        jdbcTemplate.update("update passenger_request_group set public_reference = null where id = ?",
+            legacy.getId());
+        String expected = com.dreamteam.safebus.safetycase.application.PublicReference
+            .groupRecordId(legacy.getId(), null);
+
+        queue().andExpect(status().isOk())
+            .andExpect(jsonPath("$.groupsAwaitingApproval[0].reference").value(expected));
+        queue().andExpect(jsonPath("$.groupsAwaitingApproval[0].reference").value(expected));
+    }
+
+    @Test
     void theQueueNeverExposesPassengerIdentityOrImageData() throws Exception {
         submitRequest(U1);
         submitRequest(U2);

@@ -106,7 +106,8 @@ public class GetReviewQueueQueryServiceImpl implements GetReviewQueueQueryServic
                 r.getReceivedAt(), r.getStatus().name()))
             .toList();
         int contributors = (int) requests.stream().filter(r -> r.getStatus() == RequestStatus.COUNTED).count();
-        return new GetReviewQueueResult.GroupItem(g.getId(), g.getBusId(), g.getShiftId(),
+        return new GetReviewQueueResult.GroupItem(g.getId(),
+            PublicReference.groupRecordId(g.getId(), g.getPublicReference()), g.getBusId(), g.getShiftId(),
             g.getWindowStartedAt(), g.getAwaitingSince(), contributors, requests.size(), items);
     }
 }
