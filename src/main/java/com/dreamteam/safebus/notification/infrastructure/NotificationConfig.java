@@ -1,11 +1,15 @@
 package com.dreamteam.safebus.notification.infrastructure;
 
 import com.dreamteam.safebus.notification.application.NotificationDispatcher;
+import com.dreamteam.safebus.notification.application.OpenNotificationStreamCommandService;
+import com.dreamteam.safebus.notification.application.OpenNotificationStreamCommandServiceImpl;
 import com.dreamteam.safebus.notification.application.SubscriptionRegistry;
+import com.dreamteam.safebus.shared.application.CurrentUserProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.Clock;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -36,5 +40,13 @@ public class NotificationConfig {
             },
             new ThreadPoolExecutor.AbortPolicy());
         return new NotificationDispatcher(registry, executor);
+    }
+
+    @Bean
+    public OpenNotificationStreamCommandService openNotificationStreamCommandService(
+            SubscriptionRegistry registry, CurrentUserProvider currentUserProvider, Clock clock,
+            NotificationProperties properties) {
+        return new OpenNotificationStreamCommandServiceImpl(registry, currentUserProvider, clock,
+            properties.maxConnectionAge());
     }
 }
