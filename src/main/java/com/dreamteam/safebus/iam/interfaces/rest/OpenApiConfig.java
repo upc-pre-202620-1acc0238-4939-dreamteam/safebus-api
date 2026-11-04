@@ -20,6 +20,12 @@ public class OpenApiConfig {
                                         .type(SecurityScheme.Type.HTTP)
                                         .scheme("bearer")
                                         .bearerFormat("JWT")
-                                        .description("JWT Bearer token")));
+                                        .description("JWT Bearer token"))
+                        .addSecuritySchemes("countingSourceKey",
+                                new SecurityScheme()
+                                        .type(SecurityScheme.Type.APIKEY)
+                                        .in(SecurityScheme.In.HEADER)
+                                        .name("X-Counting-Source-Key")
+                                        .description("Counting source key; accepted only on the device routes")));
     }
 }
