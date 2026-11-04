@@ -302,9 +302,9 @@ class GetFleetOverviewQueryServiceTest {
         BusOverview a = busOf(service.getOverview(), busA);
 
         assertEquals(List.of(
-            new PassengerGroupOverview("COLLECTING", 0, older.getWindowStartedAt(), older.getWindowExpiresAt(),
+            new PassengerGroupOverview("COLLECTING", 0, 0, older.getWindowStartedAt(), older.getWindowExpiresAt(),
                 null, null),
-            new PassengerGroupOverview("AWAITING_APPROVAL", 0, newer.getWindowStartedAt(),
+            new PassengerGroupOverview("AWAITING_APPROVAL", 0, 0, newer.getWindowStartedAt(),
                 newer.getWindowExpiresAt(), NOW.minusSeconds(50), null)), a.passengerGroups());
         assertTrue(busOf(service.getOverview(), busB).passengerGroups().isEmpty());
     }

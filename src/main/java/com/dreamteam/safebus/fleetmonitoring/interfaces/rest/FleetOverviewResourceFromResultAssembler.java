@@ -43,8 +43,9 @@ public final class FleetOverviewResourceFromResultAssembler {
     }
 
     private static PassengerGroupResource toGroup(PassengerGroupOverview g) {
-        return new PassengerGroupResource(g.status(), g.requestCount(), g.windowStartedAt(), g.windowExpiresAt(),
-            g.awaitingSince(), g.emergencyStatus() == null ? null : new GroupEmergencyResource(g.emergencyStatus()));
+        return new PassengerGroupResource(g.status(), g.requestCount(), g.attachedCount(), g.windowStartedAt(),
+            g.windowExpiresAt(), g.awaitingSince(),
+            g.emergencyStatus() == null ? null : new GroupEmergencyResource(g.emergencyStatus()));
     }
 
     private static LocationResource toLocation(LocationOverview location) {

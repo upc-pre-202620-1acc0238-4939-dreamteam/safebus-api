@@ -16,8 +16,8 @@ public record FleetOverviewResult(Instant generatedAt, List<BusOverview> buses) 
     public record OccupancyOverview(String status, String reason, Integer count, Integer capacity, String load,
                                     Instant lastCountAt, Instant lastHeartbeatAt) {}
 
-    public record PassengerGroupOverview(String status, int requestCount, Instant windowStartedAt,
-                                         Instant windowExpiresAt, Instant awaitingSince,
+    public record PassengerGroupOverview(String status, int requestCount, int attachedCount,
+                                         Instant windowStartedAt, Instant windowExpiresAt, Instant awaitingSince,
                                          String emergencyStatus) {}
 
     public record ShiftOverview(Long shiftId, Instant startedAt) {}

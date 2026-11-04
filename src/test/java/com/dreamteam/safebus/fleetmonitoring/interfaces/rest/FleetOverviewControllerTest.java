@@ -9,9 +9,12 @@ import com.dreamteam.safebus.fleet.domain.repository.CompanyRepository;
 import com.dreamteam.safebus.fleet.domain.repository.DriverRepository;
 import com.dreamteam.safebus.fleet.domain.repository.RouteRepository;
 import com.dreamteam.safebus.safetycase.domain.model.Emergency;
+import com.dreamteam.safebus.safetycase.domain.model.PassengerRequest;
 import com.dreamteam.safebus.safetycase.domain.model.PassengerRequestGroup;
+import com.dreamteam.safebus.safetycase.domain.model.RequestStatus;
 import com.dreamteam.safebus.safetycase.domain.repository.EmergencyRepository;
 import com.dreamteam.safebus.safetycase.domain.repository.PassengerRequestGroupRepository;
+import com.dreamteam.safebus.safetycase.domain.repository.PassengerRequestRepository;
 import com.dreamteam.safebus.trip.domain.model.BusOccupancy;
 import com.dreamteam.safebus.trip.domain.model.DriverShift;
 import com.dreamteam.safebus.trip.domain.model.LocationEvent;
@@ -80,6 +83,7 @@ class FleetOverviewControllerTest {
     @Autowired EmergencyRepository emergencyRepository;
     @Autowired BusOccupancyRepository occupancyRepository;
     @Autowired PassengerRequestGroupRepository groupRepository;
+    @Autowired PassengerRequestRepository requestRepository;
     @Autowired Clock clock;
 
     private Company company;
@@ -96,6 +100,8 @@ class FleetOverviewControllerTest {
     private final List<Bus> buses = new ArrayList<>();
     private final List<BusOccupancy> occupancies = new ArrayList<>();
     private final List<PassengerRequestGroup> groups = new ArrayList<>();
+    private final List<PassengerRequest> requests = new ArrayList<>();
+    private long nextPassenger = 970_000L;
 
     @BeforeEach
     void setUp() {
@@ -112,6 +118,7 @@ class FleetOverviewControllerTest {
     @AfterEach
     void cleanUp() {
         emergencyRepository.deleteAllById(emergencyIds);
+        requestRepository.deleteAllById(requests.stream().map(PassengerRequest::getId).toList());
         groupRepository.deleteAllById(groups.stream().map(PassengerRequestGroup::getId).toList());
         occupancyRepository.deleteAllById(occupancies.stream().map(BusOccupancy::getId).toList());
         driverShiftRepository.deleteAll(shifts);
@@ -180,6 +187,12 @@ class FleetOverviewControllerTest {
         return g;
     }
 
+    private void requestOn(PassengerRequestGroup g, RequestStatus status) {
+        requests.add(requestRepository.save(PassengerRequest.create(UUID.randomUUID().toString(), g.getId(),
+            nextPassenger++, 1L, g.getBusId(), g.getShiftId(), g.getCompanyId(), "private message", 60L,
+            "a".repeat(64), NOW, NOW, status)));
+    }
+
     private static RequestPostProcessor supervisorJwt(long companyId) {
         return jwt().jwt(b -> b.subject("9601").claim("role", "SUPERVISOR").claim("companyId", companyId))
             .authorities(new SimpleGrantedAuthority("ROLE_SUPERVISOR"));
@@ -225,7 +238,7 @@ class FleetOverviewControllerTest {
             "location", "emergencies", "passengerGroups"), keys(body, "$.buses[0]"));
         assertEquals(Set.of("status", "reason", "count", "capacity", "load", "lastCountAt", "lastHeartbeatAt"),
             keys(body, "$.buses[0].occupancy"));
-        assertEquals(Set.of("status", "requestCount", "windowStartedAt", "windowExpiresAt", "awaitingSince",
+        assertEquals(Set.of("status", "requestCount", "attachedCount", "windowStartedAt", "windowExpiresAt", "awaitingSince",
             "emergency"), keys(body, "$.buses[0].passengerGroups[0]"));
         assertEquals(Set.of("status", "latitude", "longitude", "accuracyMeters", "capturedAt"),
             keys(body, "$.buses[0].location"));
@@ -348,6 +361,21 @@ class FleetOverviewControllerTest {
             .andExpect(jsonPath("$.buses[0].passengerGroups[1].status").value("AWAITING_APPROVAL"))
             .andExpect(jsonPath("$.buses[0].passengerGroups[1].awaitingSince").value("2030-09-01T11:59:30Z"))
             .andExpect(jsonPath("$.buses[1].passengerGroups.length()").value(0));
+    }
+
+    @Test
+    void s1_requestCountIsTheCountedContributorsAndAttachedCountIsTheExtraEvidence() throws Exception {
+        PassengerRequestGroup g = openGroup(busA, shiftA.getId(), NOW.minusSeconds(60));
+        for (int i = 0; i < 3; i++) {
+            requestOn(g, RequestStatus.COUNTED);
+        }
+        requestOn(g, RequestStatus.ATTACHED);
+        requestOn(g, RequestStatus.ATTACHED);
+
+        mockMvc.perform(get(URL).with(supervisorJwt(company.getId())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.buses[0].passengerGroups[0].requestCount").value(3))
+            .andExpect(jsonPath("$.buses[0].passengerGroups[0].attachedCount").value(2));
     }
 
     @Test

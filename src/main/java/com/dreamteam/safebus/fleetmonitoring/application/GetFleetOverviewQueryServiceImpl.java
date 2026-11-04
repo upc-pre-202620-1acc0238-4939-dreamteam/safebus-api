@@ -120,7 +120,7 @@ public class GetFleetOverviewQueryServiceImpl implements GetFleetOverviewQuerySe
     }
 
     private static PassengerGroupOverview toGroup(OpenGroupView g) {
-        return new PassengerGroupOverview(g.status(), g.requestCount(), g.windowStartedAt(),
+        return new PassengerGroupOverview(g.status(), g.requestCount(), g.attachedCount(), g.windowStartedAt(),
             g.windowExpiresAt(), g.awaitingSince(), g.emergencyStatus());
     }
 

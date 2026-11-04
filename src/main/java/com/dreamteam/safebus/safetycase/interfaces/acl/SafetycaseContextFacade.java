@@ -5,6 +5,7 @@ import com.dreamteam.safebus.safetycase.domain.model.EmergencyStatus;
 import com.dreamteam.safebus.safetycase.domain.model.GroupStatus;
 import com.dreamteam.safebus.safetycase.domain.model.PassengerRequest;
 import com.dreamteam.safebus.safetycase.domain.model.PassengerRequestGroup;
+import com.dreamteam.safebus.safetycase.domain.model.RequestStatus;
 import com.dreamteam.safebus.safetycase.domain.repository.EmergencyRepository;
 import com.dreamteam.safebus.safetycase.domain.repository.PassengerRequestGroupRepository;
 import com.dreamteam.safebus.safetycase.domain.repository.PassengerRequestRepository;
@@ -26,7 +27,8 @@ public class SafetycaseContextFacade {
                                     Instant receivedAt, Instant attentionStartedAt) {}
 
     // No group id, passenger, message or evidence: only what a fleet overview may show; emergencyStatus is null until approval
-    public record OpenGroupView(Long busId, String status, int requestCount, Instant windowStartedAt,
+    // requestCount is the COUNTED contributors; attachedCount is the evidence attached after the threshold
+    public record OpenGroupView(Long busId, String status, int requestCount, int attachedCount, Instant windowStartedAt,
                                 Instant windowExpiresAt, Instant awaitingSince, String emergencyStatus) {}
 
     private static final List<EmergencyStatus> OPEN_STATUSES =
@@ -75,15 +77,22 @@ public class SafetycaseContextFacade {
             return List.of();
         }
         List<Long> ids = groups.stream().map(PassengerRequestGroup::getId).toList();
-        Map<Long, Long> requestCounts = requestRepository.findByGroupIdIn(ids).stream()
-            .collect(Collectors.groupingBy(PassengerRequest::getGroupId, Collectors.counting()));
+        List<PassengerRequest> requests = requestRepository.findByGroupIdIn(ids);
+        Map<Long, Long> requestCounts = countsOf(requests, RequestStatus.COUNTED);
+        Map<Long, Long> attachedCounts = countsOf(requests, RequestStatus.ATTACHED);
         Map<Long, Emergency> emergencies = emergencyRepository.findByGroupIdIn(ids).stream()
             .collect(Collectors.toMap(Emergency::getGroupId, e -> e));
         return groups.stream()
             .map(g -> new OpenGroupView(g.getBusId(), g.getStatus().name(),
                 requestCounts.getOrDefault(g.getId(), 0L).intValue(),
+                attachedCounts.getOrDefault(g.getId(), 0L).intValue(),
                 g.getWindowStartedAt(), g.getWindowExpiresAt(), g.getAwaitingSince(),
                 emergencies.containsKey(g.getId()) ? emergencies.get(g.getId()).getStatus().name() : null))
             .toList();
+    }
+
+    private static Map<Long, Long> countsOf(List<PassengerRequest> requests, RequestStatus status) {
+        return requests.stream().filter(r -> r.getStatus() == status)
+            .collect(Collectors.groupingBy(PassengerRequest::getGroupId, Collectors.counting()));
     }
 }

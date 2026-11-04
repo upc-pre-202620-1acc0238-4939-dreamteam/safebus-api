@@ -49,7 +49,10 @@ public record FleetOverviewResource(Instant generatedAt, List<BusResource> buses
     public record PassengerGroupResource(
         @Schema(allowableValues = {"COLLECTING", "AWAITING_APPROVAL", "APPROVED"})
         String status,
+        @Schema(description = "Distinct passenger contributors counted toward the threshold")
         int requestCount,
+        @Schema(description = "Requests attached as additional evidence after the threshold; not contributors")
+        int attachedCount,
         Instant windowStartedAt,
         Instant windowExpiresAt,
         @Schema(description = "When the group started awaiting company approval; null before that")

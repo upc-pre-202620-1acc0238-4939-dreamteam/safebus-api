@@ -87,8 +87,23 @@ class SafetycaseContextFacadeGroupsTest {
 
         List<SafetycaseContextFacade.OpenGroupView> result = facade.findOpenGroupsOfCompany(company);
 
-        assertEquals(List.of(new SafetycaseContextFacade.OpenGroupView(11L, "COLLECTING", 2,
+        assertEquals(List.of(new SafetycaseContextFacade.OpenGroupView(11L, "COLLECTING", 2, 0,
             g.getWindowStartedAt(), g.getWindowExpiresAt(), null, null)), result);
+    }
+
+    @Test
+    void onlyCountedRequestsAreContributorsAndAttachedOnesAreCountedApart() {
+        PassengerRequestGroup g = group(company, 11L);
+        request(g, RequestStatus.COUNTED);
+        request(g, RequestStatus.COUNTED);
+        request(g, RequestStatus.COUNTED);
+        request(g, RequestStatus.ATTACHED);
+        request(g, RequestStatus.ATTACHED);
+
+        var view = facade.findOpenGroupsOfCompany(company).get(0);
+
+        assertEquals(3, view.requestCount());
+        assertEquals(2, view.attachedCount());
     }
 
     @Test
