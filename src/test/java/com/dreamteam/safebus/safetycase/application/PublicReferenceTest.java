@@ -49,4 +49,21 @@ class PublicReferenceTest {
         assertEquals(reference, PublicReference.ofGroup(7L, null));
         assertNotEquals(reference, PublicReference.ofGroup(8L, null));
     }
+
+    @Test
+    void groupRecordId_isTheStoredReferenceWhenPresent() {
+        String stored = "abcdef12-3456-4789-8abc-123456789abc";
+
+        assertEquals(stored, PublicReference.groupRecordId(7L, stored));
+    }
+
+    @Test
+    void groupRecordId_derivesAStableUuidFromTheGroupIdWhenNothingIsStored() {
+        String first = PublicReference.groupRecordId(7L, null);
+
+        assertEquals(first, PublicReference.groupRecordId(7L, null));
+        assertEquals(first, PublicReference.groupRecordId(7L, " "));
+        assertNotEquals(first, PublicReference.groupRecordId(8L, null));
+        assertEquals(first, java.util.UUID.fromString(first).toString());
+    }
 }

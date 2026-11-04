@@ -15,7 +15,7 @@ public record GetReviewQueueResult(
                                 Instant activatedAt, Instant receivedAt, Long responsibleSupervisorId,
                                 Instant attentionStartedAt) {}
 
-    public record GroupItem(Long groupId, Long busId, Long shiftId, Instant windowStartedAt,
+    public record GroupItem(Long groupId, String reference, Long busId, Long shiftId, Instant windowStartedAt,
                             Instant awaitingSince, int contributorCount, int requestCount,
                             List<RequestItem> requests) {}
 

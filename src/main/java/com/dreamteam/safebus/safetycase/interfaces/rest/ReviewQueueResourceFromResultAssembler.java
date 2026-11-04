@@ -22,7 +22,7 @@ public final class ReviewQueueResourceFromResultAssembler {
     }
 
     private static ReviewQueueResource.GroupResource toResource(GetReviewQueueResult.GroupItem g) {
-        return new ReviewQueueResource.GroupResource(g.groupId(), g.busId(), g.shiftId(), g.windowStartedAt(),
+        return new ReviewQueueResource.GroupResource(g.groupId(), g.reference(), g.busId(), g.shiftId(), g.windowStartedAt(),
             g.awaitingSince(), g.contributorCount(), g.requestCount(),
             g.requests().stream().map(r -> new ReviewQueueResource.RequestResource(r.requestId(), r.message(),
                 r.activatedAt(), r.receivedAt(), r.status(), PHOTO_PATH.formatted(r.requestId()))).toList());
