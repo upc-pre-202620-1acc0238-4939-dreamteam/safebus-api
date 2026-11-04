@@ -8,17 +8,21 @@ import com.dreamteam.safebus.fleetmonitoring.application.FleetOverviewResult.Bus
 import com.dreamteam.safebus.fleetmonitoring.application.FleetOverviewResult.DriverOverview;
 import com.dreamteam.safebus.fleetmonitoring.application.FleetOverviewResult.EmergencyOverview;
 import com.dreamteam.safebus.fleetmonitoring.application.FleetOverviewResult.LocationOverview;
+import com.dreamteam.safebus.fleetmonitoring.application.FleetOverviewResult.OccupancyOverview;
+import com.dreamteam.safebus.fleetmonitoring.application.FleetOverviewResult.PassengerGroupOverview;
 import com.dreamteam.safebus.fleetmonitoring.application.FleetOverviewResult.RouteOverview;
 import com.dreamteam.safebus.fleetmonitoring.application.FleetOverviewResult.ShiftOverview;
 import com.dreamteam.safebus.fleetmonitoring.domain.LocationFreshness;
 import com.dreamteam.safebus.fleetmonitoring.domain.LocationStatus;
 import com.dreamteam.safebus.safetycase.interfaces.acl.SafetycaseContextFacade;
 import com.dreamteam.safebus.safetycase.interfaces.acl.SafetycaseContextFacade.OpenEmergencyView;
+import com.dreamteam.safebus.safetycase.interfaces.acl.SafetycaseContextFacade.OpenGroupView;
 import com.dreamteam.safebus.shared.application.CurrentUserProvider;
 import com.dreamteam.safebus.shared.domain.exceptions.ForbiddenOperationException;
 import com.dreamteam.safebus.trip.interfaces.acl.TripContextFacade;
 import com.dreamteam.safebus.trip.interfaces.acl.TripContextFacade.ActiveShiftView;
 import com.dreamteam.safebus.trip.interfaces.acl.TripContextFacade.BusPositionView;
+import com.dreamteam.safebus.trip.interfaces.acl.TripContextFacade.OccupancyView;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -77,19 +81,25 @@ public class GetFleetOverviewQueryServiceImpl implements GetFleetOverviewQuerySe
             .findOpenEmergenciesOfCompany(companyId).stream()
             .sorted(EMERGENCY_ORDER)
             .collect(Collectors.groupingBy(OpenEmergencyView::busId));
+        Map<Long, List<OpenGroupView>> groupsByBus = safetycaseFacade.findOpenGroupsOfCompany(companyId).stream()
+            .collect(Collectors.groupingBy(OpenGroupView::busId));
+        Map<Long, OccupancyView> occupancies = tripFacade.findOccupancyByBusIds(busIds);
 
         Instant now = Instant.now(clock);
         List<BusOverview> overview = buses.stream()
             .filter(bus -> bus.enabled() || emergenciesByBus.containsKey(bus.busId()))
             .map(bus -> toOverview(bus, shifts.get(bus.busId()), positions.get(bus.busId()),
-                drivers, routes, emergenciesByBus.getOrDefault(bus.busId(), List.of()), now))
+                drivers, routes, occupancies.get(bus.busId()),
+                emergenciesByBus.getOrDefault(bus.busId(), List.of()),
+                groupsByBus.getOrDefault(bus.busId(), List.of()), now))
             .toList();
         return new FleetOverviewResult(now, overview);
     }
 
     private static BusOverview toOverview(BusSummary bus, ActiveShiftView shift, BusPositionView position,
                                           Map<Long, DriverSummary> drivers, Map<Long, RouteSummary> routes,
-                                          List<OpenEmergencyView> emergencies, Instant now) {
+                                          OccupancyView occupancy, List<OpenEmergencyView> emergencies,
+                                          List<OpenGroupView> groups, Instant now) {
         ShiftOverview shiftOverview = shift == null ? null
             : new ShiftOverview(shift.shiftId(), shift.startedAt());
         RouteSummary route = shift == null ? null : routes.get(shift.routeId());
@@ -99,7 +109,19 @@ public class GetFleetOverviewQueryServiceImpl implements GetFleetOverviewQuerySe
             route == null ? null : new RouteOverview(route.name(), route.origin(), route.destination()),
             driver == null ? null : new DriverOverview(driver.fullName()),
             toLocation(position, now),
-            emergencies.stream().map(GetFleetOverviewQueryServiceImpl::toEmergency).toList());
+            toOccupancy(occupancy),
+            emergencies.stream().map(GetFleetOverviewQueryServiceImpl::toEmergency).toList(),
+            groups.stream().map(GetFleetOverviewQueryServiceImpl::toGroup).toList());
+    }
+
+    private static OccupancyOverview toOccupancy(OccupancyView o) {
+        return new OccupancyOverview(o.status(), o.reason(), o.count(), o.capacity(), o.load(),
+            o.lastCountAt(), o.lastHeartbeatAt());
+    }
+
+    private static PassengerGroupOverview toGroup(OpenGroupView g) {
+        return new PassengerGroupOverview(g.status(), g.requestCount(), g.windowStartedAt(),
+            g.windowExpiresAt(), g.awaitingSince(), g.emergencyStatus());
     }
 
     private static LocationOverview toLocation(BusPositionView position, Instant now) {

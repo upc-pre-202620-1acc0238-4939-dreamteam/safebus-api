@@ -68,6 +68,10 @@ public class TripContextFacade {
 
     // Latest ACTIVE shift per bus by startedAt; when startedAt is identical the greatest shift id wins
     public Map<Long, ActiveShiftView> findActiveShiftsByBusIds(Collection<Long> busIds) {
+        return activeShiftsOf(busIds);
+    }
+
+    private Map<Long, ActiveShiftView> activeShiftsOf(Collection<Long> busIds) {
         if (busIds == null || busIds.isEmpty()) {
             return Map.of();
         }
@@ -100,7 +104,7 @@ public class TripContextFacade {
         Instant now = Instant.now(clock);
         Map<Long, BusOccupancy> occupancies = new HashMap<>();
         busOccupancyRepository.findByBusIdIn(busIds).forEach(o -> occupancies.put(o.getBusId(), o));
-        Map<Long, ActiveShiftView> shifts = findActiveShiftsByBusIds(busIds);
+        Map<Long, ActiveShiftView> shifts = activeShiftsOf(busIds);
         Map<Long, Integer> capacities = fleetFacade.findCapacitiesByBusIds(busIds);
 
         Map<Long, OccupancyView> views = new HashMap<>();
