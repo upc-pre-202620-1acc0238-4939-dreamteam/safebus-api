@@ -11,16 +11,23 @@ import com.dreamteam.safebus.fleet.domain.repository.RouteRepository;
 import com.dreamteam.safebus.fleet.interfaces.acl.FleetContextFacade;
 import com.dreamteam.safebus.fleetmonitoring.application.FleetOverviewResult.BusOverview;
 import com.dreamteam.safebus.fleetmonitoring.application.FleetOverviewResult.EmergencyOverview;
+import com.dreamteam.safebus.fleetmonitoring.application.FleetOverviewResult.OccupancyOverview;
+import com.dreamteam.safebus.fleetmonitoring.application.FleetOverviewResult.PassengerGroupOverview;
 import com.dreamteam.safebus.fleetmonitoring.domain.LocationStatus;
 import com.dreamteam.safebus.safetycase.domain.model.Emergency;
+import com.dreamteam.safebus.safetycase.domain.model.PassengerRequestGroup;
 import com.dreamteam.safebus.safetycase.domain.repository.EmergencyRepository;
+import com.dreamteam.safebus.safetycase.domain.repository.PassengerRequestGroupRepository;
 import com.dreamteam.safebus.safetycase.interfaces.acl.SafetycaseContextFacade;
 import com.dreamteam.safebus.shared.application.AuthenticatedUser;
 import com.dreamteam.safebus.shared.application.CurrentUserProvider;
 import com.dreamteam.safebus.shared.domain.exceptions.ForbiddenOperationException;
+import com.dreamteam.safebus.trip.domain.model.BusOccupancy;
 import com.dreamteam.safebus.trip.domain.model.DriverShift;
 import com.dreamteam.safebus.trip.domain.model.LocationEvent;
+import com.dreamteam.safebus.trip.domain.model.OccupancyEventType;
 import com.dreamteam.safebus.trip.domain.model.VehicleLocation;
+import com.dreamteam.safebus.trip.domain.repository.BusOccupancyRepository;
 import com.dreamteam.safebus.trip.domain.repository.DriverShiftRepository;
 import com.dreamteam.safebus.trip.domain.repository.VehicleLocationRepository;
 import com.dreamteam.safebus.trip.interfaces.acl.TripContextFacade;
@@ -76,6 +83,8 @@ class GetFleetOverviewQueryServiceTest {
     @Autowired DriverShiftRepository driverShiftRepository;
     @Autowired VehicleLocationRepository vehicleLocationRepository;
     @Autowired EmergencyRepository emergencyRepository;
+    @Autowired BusOccupancyRepository occupancyRepository;
+    @Autowired PassengerRequestGroupRepository groupRepository;
     @Autowired Clock clock;
     @MockitoBean CurrentUserProvider currentUserProvider;
     @MockitoSpyBean FleetContextFacade fleetFacade;
@@ -94,6 +103,8 @@ class GetFleetOverviewQueryServiceTest {
     private final List<DriverShift> shifts = new ArrayList<>();
     private final List<VehicleLocation> locations = new ArrayList<>();
     private final List<Bus> buses = new ArrayList<>();
+    private final List<BusOccupancy> occupancies = new ArrayList<>();
+    private final List<PassengerRequestGroup> groups = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
@@ -114,6 +125,8 @@ class GetFleetOverviewQueryServiceTest {
     @AfterEach
     void cleanUp() {
         emergencyRepository.deleteAllById(emergencyIds);
+        groupRepository.deleteAllById(groups.stream().map(PassengerRequestGroup::getId).toList());
+        occupancyRepository.deleteAllById(occupancies.stream().map(BusOccupancy::getId).toList());
         driverShiftRepository.deleteAll(shifts);
         vehicleLocationRepository.deleteAll(locations);
         busRepository.deleteAll(buses);
@@ -171,6 +184,27 @@ class GetFleetOverviewQueryServiceTest {
         emergencyRepository.save(e);
     }
 
+    private BusOccupancy countedOccupancy(Bus bus, Long shiftId, int entries, Instant heartbeat) {
+        BusOccupancy o = BusOccupancy.create(bus.getCompanyId(), bus.getId(), 1L);
+        o.initialize(UUID.randomUUID().toString(), shiftId, 0, NOW.minusSeconds(600), NOW);
+        for (int i = 1; i <= entries; i++) {
+            o.apply(shiftId, OccupancyEventType.ENTRY, i, NOW.minusSeconds(500 - i));
+        }
+        if (heartbeat != null) {
+            o.recordHeartbeat(heartbeat);
+        }
+        BusOccupancy saved = occupancyRepository.save(o);
+        occupancies.add(saved);
+        return saved;
+    }
+
+    private PassengerRequestGroup openGroup(Company owner, Bus bus, Long shiftId, Instant startedAt) {
+        PassengerRequestGroup g = groupRepository.save(
+            PassengerRequestGroup.open(owner.getId(), bus.getId(), shiftId, startedAt));
+        groups.add(g);
+        return g;
+    }
+
     private BusOverview busOf(FleetOverviewResult result, Bus bus) {
         return result.buses().stream().filter(b -> b.busId().equals(bus.getId())).findFirst().orElseThrow();
     }
@@ -210,6 +244,90 @@ class GetFleetOverviewQueryServiceTest {
         assertEquals(new FleetOverviewResult.LocationOverview(LocationStatus.UNAVAILABLE, null, null, null, null),
             b.location());
         assertTrue(b.emergencies().isEmpty());
+        assertTrue(a.passengerGroups().isEmpty());
+        assertTrue(b.passengerGroups().isEmpty());
+    }
+
+    @Test
+    void busWithoutAnyCountHasAnUnavailableOccupancyWithNoNumbers() {
+        BusOverview a = busOf(service.getOverview(), busA);
+
+        assertEquals(new OccupancyOverview("UNAVAILABLE", "NOT_INITIALIZED", null, null, null, null, null),
+            a.occupancy());
+    }
+
+    @Test
+    void currentOccupancyCarriesCountCapacityLoadAndTimes() {
+        Bus stored = busRepository.findById(busA.getId()).orElseThrow();
+        stored.recordCapacity(2, "TECH-2", 1L, at(NOW));
+        busRepository.save(stored);
+        BusOccupancy o = countedOccupancy(busA, shiftA.getId(), 3, NOW.minusSeconds(30));
+
+        OccupancyOverview occupancy = busOf(service.getOverview(), busA).occupancy();
+
+        assertEquals(new OccupancyOverview("CURRENT", null, 3, 2, "OVER_CAPACITY", o.getLastCountAt(),
+            NOW.minusSeconds(30)), occupancy);
+    }
+
+    @Test
+    void occupancyWithAnOldHeartbeatIsStaleButKeepsTheCount() {
+        countedOccupancy(busA, shiftA.getId(), 1, NOW.minusSeconds(121));
+
+        OccupancyOverview occupancy = busOf(service.getOverview(), busA).occupancy();
+
+        assertEquals("STALE", occupancy.status());
+        assertEquals(1, occupancy.count());
+        assertEquals("CAPACITY_UNKNOWN", occupancy.load());
+    }
+
+    @Test
+    void occupancyCountedOnAnotherShiftIsUnavailable() {
+        countedOccupancy(busA, shiftA.getId() + 1_000_000L, 2, NOW);
+
+        OccupancyOverview occupancy = busOf(service.getOverview(), busA).occupancy();
+
+        assertEquals("UNAVAILABLE", occupancy.status());
+        assertNull(occupancy.count());
+        assertNull(occupancy.load());
+    }
+
+    @Test
+    void openGroupsOfABusAreListedOldestWindowFirstWithoutIdentities() {
+        PassengerRequestGroup older = openGroup(company, busA, shiftA.getId(), NOW.minusSeconds(200));
+        PassengerRequestGroup newer = openGroup(company, busA, shiftA.getId() + 1_000_000L, NOW.minusSeconds(100));
+        PassengerRequestGroup stored = groupRepository.findById(newer.getId()).orElseThrow();
+        stored.moveToAwaitingApproval(NOW.minusSeconds(50));
+        groupRepository.save(stored);
+
+        BusOverview a = busOf(service.getOverview(), busA);
+
+        assertEquals(List.of(
+            new PassengerGroupOverview("COLLECTING", 0, 0, older.getWindowStartedAt(), older.getWindowExpiresAt(),
+                null, null),
+            new PassengerGroupOverview("AWAITING_APPROVAL", 0, 0, newer.getWindowStartedAt(),
+                newer.getWindowExpiresAt(), NOW.minusSeconds(50), null)), a.passengerGroups());
+        assertTrue(busOf(service.getOverview(), busB).passengerGroups().isEmpty());
+    }
+
+    @Test
+    void groupOfAnotherCompanyIsNotShownOnAnyBus() {
+        Bus foreign = saveBus(otherCompany, "OV-Z");
+        openGroup(otherCompany, foreign, 1L, NOW.minusSeconds(60));
+
+        FleetOverviewResult result = service.getOverview();
+
+        assertTrue(result.buses().stream().allMatch(b -> b.passengerGroups().isEmpty()));
+    }
+
+    @Test
+    void groupOfADisabledBusWithoutEmergenciesIsNotShown() {
+        busB.disable();
+        busRepository.save(busB);
+        openGroup(company, busB, 1L, NOW.minusSeconds(60));
+
+        FleetOverviewResult result = service.getOverview();
+
+        assertEquals(List.of(busA.getId()), result.buses().stream().map(BusOverview::busId).toList());
     }
 
     @Test
@@ -351,6 +469,8 @@ class GetFleetOverviewQueryServiceTest {
         verify(fleetFacade, times(1)).findRoutesByIds(any());
         verify(tripFacade, times(1)).findActiveShiftsByBusIds(any());
         verify(tripFacade, times(1)).findLastPositionsByBusIds(any());
+        verify(tripFacade, times(1)).findOccupancyByBusIds(any());
         verify(safetycaseFacade, times(1)).findOpenEmergenciesOfCompany(any());
+        verify(safetycaseFacade, times(1)).findOpenGroupsOfCompany(any());
     }
 }

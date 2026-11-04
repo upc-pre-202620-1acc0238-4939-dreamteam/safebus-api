@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -33,4 +34,6 @@ public interface PassengerRequestGroupRepository extends JpaRepository<Passenger
     List<PassengerRequestGroup> findByBusIdAndShiftIdOrderByIdAsc(Long busId, Long shiftId);
 
     List<PassengerRequestGroup> findByCompanyIdAndStatus(Long companyId, GroupStatus status);
+
+    List<PassengerRequestGroup> findByCompanyIdAndStatusIn(Long companyId, Collection<GroupStatus> statuses);
 }

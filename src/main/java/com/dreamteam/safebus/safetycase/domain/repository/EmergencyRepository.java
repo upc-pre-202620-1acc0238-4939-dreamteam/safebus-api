@@ -17,6 +17,8 @@ public interface EmergencyRepository extends JpaRepository<Emergency, String> {
 
     Optional<Emergency> findByGroupId(Long groupId);
 
+    List<Emergency> findByGroupIdIn(Collection<Long> groupIds);
+
     List<Emergency> findByBusIdAndShiftIdOrderByReceivedAtDesc(Long busId, Long shiftId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

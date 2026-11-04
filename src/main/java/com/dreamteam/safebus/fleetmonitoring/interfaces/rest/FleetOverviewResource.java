@@ -13,7 +13,6 @@ public record FleetOverviewResource(Instant generatedAt, List<BusResource> buses
         boolean enabled,
         @Schema(description = "Recorded passenger capacity (US12); null when never recorded")
         Integer capacity,
-        OccupancyResource occupancy,
         @Schema(description = "Active shift of the bus; null when the bus has no active shift")
         ShiftResource shift,
         @Schema(description = "Route of the active shift; null when the bus has no active shift")
@@ -21,21 +20,47 @@ public record FleetOverviewResource(Instant generatedAt, List<BusResource> buses
         @Schema(description = "Driver of the active shift; null when the bus has no active shift")
         DriverResource driver,
         LocationResource location,
+        OccupancyResource occupancy,
         @Schema(description = "Open emergencies (ACTIVE or IN_PROGRESS) of the bus, newest received first")
         List<EmergencyResource> emergencies,
-        @Schema(description = "Passenger request groups with their approval states. Always empty for now: "
-            + "it depends on a story that is not implemented yet (US08)")
-        List<Object> passengerGroups) {}
+        @Schema(description = "Open passenger request groups of the bus (COLLECTING, AWAITING_APPROVAL or "
+            + "APPROVED), oldest window first; carries counts and states only, never identities, messages "
+            + "or evidence")
+        List<PassengerGroupResource> passengerGroups) {}
 
     public record OccupancyResource(
-        @Schema(description = "Passenger count. Always null for now: it depends on a story that is not "
-            + "implemented yet (US19)")
+        @Schema(description = "CURRENT, STALE (heartbeat older than two minutes, count kept) or UNAVAILABLE "
+            + "(count and load are null and reason says why)",
+            allowableValues = {"CURRENT", "STALE", "UNAVAILABLE"})
+        String status,
+        @Schema(description = "Only when UNAVAILABLE", allowableValues = {"NOT_INITIALIZED", "SEQUENCE_GAP",
+            "INCONSISTENT_COUNT"})
+        String reason,
+        @Schema(description = "Passenger count; null when UNAVAILABLE")
         Integer count,
         @Schema(description = "Recorded bus capacity (US12); null when never recorded")
         Integer capacity,
-        @Schema(description = "Always UNAVAILABLE for now: the passenger count is not implemented yet (US19)",
-            allowableValues = "UNAVAILABLE")
-        String status) {}
+        @Schema(description = "Null when UNAVAILABLE", allowableValues = {"WITHIN_CAPACITY", "OVER_CAPACITY",
+            "CAPACITY_UNKNOWN"})
+        String load,
+        Instant lastCountAt,
+        Instant lastHeartbeatAt) {}
+
+    public record PassengerGroupResource(
+        @Schema(allowableValues = {"COLLECTING", "AWAITING_APPROVAL", "APPROVED"})
+        String status,
+        @Schema(description = "Distinct passenger contributors counted toward the threshold")
+        int requestCount,
+        @Schema(description = "Requests attached as additional evidence after the threshold; not contributors")
+        int attachedCount,
+        Instant windowStartedAt,
+        Instant windowExpiresAt,
+        @Schema(description = "When the group started awaiting company approval; null before that")
+        Instant awaitingSince,
+        @Schema(description = "Emergency raised by the approval; null until the group is approved")
+        GroupEmergencyResource emergency) {}
+
+    public record GroupEmergencyResource(@Schema(allowableValues = {"ACTIVE", "IN_PROGRESS"}) String status) {}
 
     public record ShiftResource(Long shiftId, Instant startedAt) {}
 
