@@ -22,6 +22,7 @@ class EmergencyCreationRetryTest {
 
     @Autowired CreateDriverEmergencyCommandService orchestrator;
     @MockitoBean EmergencyWriter writer;
+    @MockitoBean SupervisorNotifier notifier;
 
     @Test
     void orchestrator_retries_onDataIntegrityViolation_secondAttemptSucceeds() {
@@ -40,5 +41,6 @@ class EmergencyCreationRetryTest {
 
         assertEquals(expected, actual);
         verify(writer, times(2)).write(any());
+        verify(notifier, times(1)).driverEmergencyCreated(expected.id());
     }
 }

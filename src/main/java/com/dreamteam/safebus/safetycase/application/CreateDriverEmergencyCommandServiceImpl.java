@@ -8,17 +8,24 @@ import org.springframework.stereotype.Service;
 public class CreateDriverEmergencyCommandServiceImpl implements CreateDriverEmergencyCommandService {
 
     private final EmergencyWriter writer;
+    private final SupervisorNotifier notifier;
 
-    public CreateDriverEmergencyCommandServiceImpl(EmergencyWriter writer) {
+    public CreateDriverEmergencyCommandServiceImpl(EmergencyWriter writer, SupervisorNotifier notifier) {
         this.writer = writer;
+        this.notifier = notifier;
     }
 
     @Override
     public CreateDriverEmergencyResult create(CreateDriverEmergencyCommand command) {
+        CreateDriverEmergencyResult result;
         try {
-            return writer.write(command);
+            result = writer.write(command);
         } catch (DataIntegrityViolationException | ObjectOptimisticLockingFailureException ex) {
-            return writer.write(command); // retry once in a new transaction
+            result = writer.write(command); // retry once in a new transaction
         }
+        if (!result.duplicate()) {
+            notifier.driverEmergencyCreated(result.id());
+        }
+        return result;
     }
 }
