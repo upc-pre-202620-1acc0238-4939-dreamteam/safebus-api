@@ -98,7 +98,7 @@ public class PassengerRequestWriterImpl implements PassengerRequestWriter {
                 RequestStatus.LATE);
             requestRepository.saveAndFlush(late);
             return new RegisterPassengerRequestResult(late.getId(), late.getStatus().name(),
-                late.getReceivedAt(), null, null, false);
+                late.getReceivedAt(), null, null, false, null, false);
         }
 
         Optional<PassengerRequestGroup> openGroup =
@@ -134,12 +134,14 @@ public class PassengerRequestWriterImpl implements PassengerRequestWriter {
         requestRepository.saveAndFlush(request);
 
         long contributors = requestRepository.countByGroupIdAndStatus(group.getId(), RequestStatus.COUNTED);
-        if (collecting && contributors >= PassengerRequestPolicy.REQUIRED_CONTRIBUTORS) {
+        boolean reviewRequired = collecting && contributors >= PassengerRequestPolicy.REQUIRED_CONTRIBUTORS;
+        if (reviewRequired) {
             group.moveToAwaitingApproval(now);
             groupRepository.saveAndFlush(group);
         }
         return new RegisterPassengerRequestResult(request.getId(), request.getStatus().name(),
-            request.getReceivedAt(), group.getStatus().name(), (int) contributors, false);
+            request.getReceivedAt(), group.getStatus().name(), (int) contributors, false, group.getId(),
+            reviewRequired);
     }
 
     private ImageInfo inspectPhoto(byte[] photo) {
@@ -193,7 +195,8 @@ public class PassengerRequestWriterImpl implements PassengerRequestWriter {
         Integer contributors = group.map(g ->
             (int) requestRepository.countByGroupIdAndStatus(g.getId(), RequestStatus.COUNTED)).orElse(null);
         return Optional.of(new RegisterPassengerRequestResult(stored.getId(), stored.getStatus().name(),
-            stored.getReceivedAt(), group.map(g -> g.getStatus().name()).orElse(null), contributors, true));
+            stored.getReceivedAt(), group.map(g -> g.getStatus().name()).orElse(null), contributors, true,
+            group.map(PassengerRequestGroup::getId).orElse(null), false));
     }
 
     private static String sha256Of(byte[] content) {

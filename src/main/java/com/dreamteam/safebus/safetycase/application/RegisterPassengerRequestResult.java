@@ -4,5 +4,5 @@ import java.time.Instant;
 
 public record RegisterPassengerRequestResult(String requestId, String status, Instant receivedAt,
                                              String groupStatus, Integer contributorCount,
-                                             boolean duplicate) {
+                                             boolean duplicate, Long groupId, boolean reviewRequired) {
 }

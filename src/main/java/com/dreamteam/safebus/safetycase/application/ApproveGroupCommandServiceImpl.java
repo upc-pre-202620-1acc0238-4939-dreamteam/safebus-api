@@ -9,17 +9,24 @@ import org.springframework.stereotype.Service;
 public class ApproveGroupCommandServiceImpl implements ApproveGroupCommandService {
 
     private final GroupDecisionWriter writer;
+    private final SupervisorNotifier notifier;
 
-    public ApproveGroupCommandServiceImpl(GroupDecisionWriter writer) {
+    public ApproveGroupCommandServiceImpl(GroupDecisionWriter writer, SupervisorNotifier notifier) {
         this.writer = writer;
+        this.notifier = notifier;
     }
 
     @Override
     public ApproveGroupResult approve(ApproveGroupCommand command) {
+        ApproveGroupResult result;
         try {
-            return writer.approve(command);
+            result = writer.approve(command);
         } catch (DataIntegrityViolationException | ObjectOptimisticLockingFailureException ex) {
-            return writer.approve(command); // retry once in a new transaction
+            result = writer.approve(command); // retry once in a new transaction
         }
+        if (!result.replay()) {
+            notifier.groupApproved(result.groupId(), result.emergencyId());
+        }
+        return result;
     }
 }

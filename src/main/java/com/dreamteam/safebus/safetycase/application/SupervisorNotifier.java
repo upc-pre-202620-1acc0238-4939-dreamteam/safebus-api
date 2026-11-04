@@ -16,4 +16,12 @@ public class SupervisorNotifier {
     public void driverEmergencyCreated(String emergencyId) {
         publisher.publishEvent(SupervisorNotificationRequested.driverEmergency(emergencyId));
     }
+
+    public void groupReviewRequired(Long groupId) {
+        publisher.publishEvent(SupervisorNotificationRequested.groupReviewRequired(groupId));
+    }
+
+    public void groupApproved(Long groupId, String emergencyId) {
+        publisher.publishEvent(SupervisorNotificationRequested.groupApproved(groupId, emergencyId));
+    }
 }
