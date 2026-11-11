@@ -5,6 +5,7 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import com.dreamteam.safebus.shared.domain.exceptions.ForbiddenOperationException;
 import com.dreamteam.safebus.shared.domain.exceptions.NotFoundException;
 import com.dreamteam.safebus.shared.domain.exceptions.RuleViolationException;
+import com.dreamteam.safebus.shared.domain.exceptions.TooManyRequestsException;
 import com.dreamteam.safebus.shared.domain.exceptions.UnauthorizedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -50,6 +51,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ForbiddenOperationException.class)
     public ProblemDetail handleForbiddenOperation(ForbiddenOperationException ex) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        pd.setProperty("code", ex.code());
+        return pd;
+    }
+
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ProblemDetail handleTooManyRequests(TooManyRequestsException ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
         pd.setProperty("code", ex.code());
         return pd;
     }

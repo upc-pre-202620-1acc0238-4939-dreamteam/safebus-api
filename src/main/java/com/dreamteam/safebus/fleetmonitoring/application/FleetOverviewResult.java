@@ -9,7 +9,16 @@ public record FleetOverviewResult(Instant generatedAt, List<BusOverview> buses) 
 
     public record BusOverview(Long busId, String plate, boolean enabled, Integer capacity,
                               ShiftOverview shift, RouteOverview route, DriverOverview driver,
-                              LocationOverview location, List<EmergencyOverview> emergencies) {}
+                              LocationOverview location, OccupancyOverview occupancy,
+                              List<EmergencyOverview> emergencies,
+                              List<PassengerGroupOverview> passengerGroups) {}
+
+    public record OccupancyOverview(String status, String reason, Integer count, Integer capacity, String load,
+                                    Instant lastCountAt, Instant lastHeartbeatAt) {}
+
+    public record PassengerGroupOverview(String status, int requestCount, int attachedCount,
+                                         Instant windowStartedAt, Instant windowExpiresAt, Instant awaitingSince,
+                                         String emergencyStatus) {}
 
     public record ShiftOverview(Long shiftId, Instant startedAt) {}
 

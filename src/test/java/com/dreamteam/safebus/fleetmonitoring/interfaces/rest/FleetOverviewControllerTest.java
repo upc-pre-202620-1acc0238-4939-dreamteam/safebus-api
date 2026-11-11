@@ -9,10 +9,18 @@ import com.dreamteam.safebus.fleet.domain.repository.CompanyRepository;
 import com.dreamteam.safebus.fleet.domain.repository.DriverRepository;
 import com.dreamteam.safebus.fleet.domain.repository.RouteRepository;
 import com.dreamteam.safebus.safetycase.domain.model.Emergency;
+import com.dreamteam.safebus.safetycase.domain.model.PassengerRequest;
+import com.dreamteam.safebus.safetycase.domain.model.PassengerRequestGroup;
+import com.dreamteam.safebus.safetycase.domain.model.RequestStatus;
 import com.dreamteam.safebus.safetycase.domain.repository.EmergencyRepository;
+import com.dreamteam.safebus.safetycase.domain.repository.PassengerRequestGroupRepository;
+import com.dreamteam.safebus.safetycase.domain.repository.PassengerRequestRepository;
+import com.dreamteam.safebus.trip.domain.model.BusOccupancy;
 import com.dreamteam.safebus.trip.domain.model.DriverShift;
 import com.dreamteam.safebus.trip.domain.model.LocationEvent;
+import com.dreamteam.safebus.trip.domain.model.OccupancyEventType;
 import com.dreamteam.safebus.trip.domain.model.VehicleLocation;
+import com.dreamteam.safebus.trip.domain.repository.BusOccupancyRepository;
 import com.dreamteam.safebus.trip.domain.repository.DriverShiftRepository;
 import com.dreamteam.safebus.trip.domain.repository.VehicleLocationRepository;
 import com.jayway.jsonpath.JsonPath;
@@ -73,6 +81,9 @@ class FleetOverviewControllerTest {
     @Autowired DriverShiftRepository driverShiftRepository;
     @Autowired VehicleLocationRepository vehicleLocationRepository;
     @Autowired EmergencyRepository emergencyRepository;
+    @Autowired BusOccupancyRepository occupancyRepository;
+    @Autowired PassengerRequestGroupRepository groupRepository;
+    @Autowired PassengerRequestRepository requestRepository;
     @Autowired Clock clock;
 
     private Company company;
@@ -87,6 +98,10 @@ class FleetOverviewControllerTest {
     private final List<DriverShift> shifts = new ArrayList<>();
     private final List<VehicleLocation> locations = new ArrayList<>();
     private final List<Bus> buses = new ArrayList<>();
+    private final List<BusOccupancy> occupancies = new ArrayList<>();
+    private final List<PassengerRequestGroup> groups = new ArrayList<>();
+    private final List<PassengerRequest> requests = new ArrayList<>();
+    private long nextPassenger = 970_000L;
 
     @BeforeEach
     void setUp() {
@@ -103,6 +118,9 @@ class FleetOverviewControllerTest {
     @AfterEach
     void cleanUp() {
         emergencyRepository.deleteAllById(emergencyIds);
+        requestRepository.deleteAllById(requests.stream().map(PassengerRequest::getId).toList());
+        groupRepository.deleteAllById(groups.stream().map(PassengerRequestGroup::getId).toList());
+        occupancyRepository.deleteAllById(occupancies.stream().map(BusOccupancy::getId).toList());
         driverShiftRepository.deleteAll(shifts);
         vehicleLocationRepository.deleteAll(locations);
         busRepository.deleteAll(buses);
@@ -150,6 +168,31 @@ class FleetOverviewControllerTest {
         emergencyRepository.save(e);
     }
 
+    private void countOn(Bus bus, Long shiftId, int entries, Instant heartbeat) {
+        BusOccupancy o = BusOccupancy.create(bus.getCompanyId(), bus.getId(), 1L);
+        o.initialize(UUID.randomUUID().toString(), shiftId, 0, NOW.minusSeconds(600), NOW);
+        for (int i = 1; i <= entries; i++) {
+            o.apply(shiftId, OccupancyEventType.ENTRY, i, NOW.minusSeconds(500 - i));
+        }
+        if (heartbeat != null) {
+            o.recordHeartbeat(heartbeat);
+        }
+        occupancies.add(occupancyRepository.save(o));
+    }
+
+    private PassengerRequestGroup openGroup(Bus bus, Long shiftId, Instant startedAt) {
+        PassengerRequestGroup g = groupRepository.save(
+            PassengerRequestGroup.open(bus.getCompanyId(), bus.getId(), shiftId, startedAt));
+        groups.add(g);
+        return g;
+    }
+
+    private void requestOn(PassengerRequestGroup g, RequestStatus status) {
+        requests.add(requestRepository.save(PassengerRequest.create(UUID.randomUUID().toString(), g.getId(),
+            nextPassenger++, 1L, g.getBusId(), g.getShiftId(), g.getCompanyId(), "private message", 60L,
+            "a".repeat(64), NOW, NOW, status)));
+    }
+
     private static RequestPostProcessor supervisorJwt(long companyId) {
         return jwt().jwt(b -> b.subject("9601").claim("role", "SUPERVISOR").claim("companyId", companyId))
             .authorities(new SimpleGrantedAuthority("ROLE_SUPERVISOR"));
@@ -185,13 +228,18 @@ class FleetOverviewControllerTest {
     @Test
     void s1_responseHasExactlyTheDocumentedKeys() throws Exception {
         fullFixture();
+        countOn(busA, shiftA.getId(), 2, NOW.minusSeconds(10));
+        openGroup(busA, shiftA.getId(), NOW.minusSeconds(60));
 
         String body = overviewBody();
 
         assertEquals(Set.of("generatedAt", "buses"), keys(body, "$"));
         assertEquals(Set.of("busId", "plate", "enabled", "capacity", "occupancy", "shift", "route", "driver",
             "location", "emergencies", "passengerGroups"), keys(body, "$.buses[0]"));
-        assertEquals(Set.of("count", "capacity", "status"), keys(body, "$.buses[0].occupancy"));
+        assertEquals(Set.of("status", "reason", "count", "capacity", "load", "lastCountAt", "lastHeartbeatAt"),
+            keys(body, "$.buses[0].occupancy"));
+        assertEquals(Set.of("status", "requestCount", "attachedCount", "windowStartedAt", "windowExpiresAt", "awaitingSince",
+            "emergency"), keys(body, "$.buses[0].passengerGroups[0]"));
         assertEquals(Set.of("status", "latitude", "longitude", "accuracyMeters", "capturedAt"),
             keys(body, "$.buses[0].location"));
         assertEquals(Set.of("id", "source", "priority", "status", "shiftId", "activatedAt", "receivedAt",
@@ -248,24 +296,92 @@ class FleetOverviewControllerTest {
     }
 
     @Test
-    void s1_capacityComesFromUs12AndOccupancyCountIsNullWithStatusUnavailable() throws Exception {
+    void s1_busWithoutAnyCountHasUnavailableOccupancyWithNullNumbers() throws Exception {
         fullFixture();
 
         mockMvc.perform(get(URL).with(supervisorJwt(company.getId())))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.buses[0].capacity").value(40))
-            .andExpect(jsonPath("$.buses[0].occupancy.capacity").value(40))
-            .andExpect(jsonPath("$.buses[0].occupancy.count").value(org.hamcrest.Matchers.nullValue()))
             .andExpect(jsonPath("$.buses[0].occupancy.status").value("UNAVAILABLE"))
+            .andExpect(jsonPath("$.buses[0].occupancy.reason").value("NOT_INITIALIZED"))
+            .andExpect(jsonPath("$.buses[0].occupancy.count").value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$.buses[0].occupancy.load").value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$.buses[0].occupancy.capacity").value(40))
             .andExpect(jsonPath("$.buses[1].capacity").value(org.hamcrest.Matchers.nullValue()))
-            .andExpect(jsonPath("$.buses[1].occupancy.capacity").value(org.hamcrest.Matchers.nullValue()))
-            .andExpect(jsonPath("$.buses[1].occupancy.count").value(org.hamcrest.Matchers.nullValue()))
-            .andExpect(jsonPath("$.buses[1].occupancy.status").value("UNAVAILABLE"));
+            .andExpect(jsonPath("$.buses[1].occupancy.status").value("UNAVAILABLE"))
+            .andExpect(jsonPath("$.buses[1].occupancy.count").value(org.hamcrest.Matchers.nullValue()));
     }
 
     @Test
-    void s1_passengerGroupsAreAlwaysEmpty() throws Exception {
+    void s1_currentOccupancyShowsCountCapacityAndLoad() throws Exception {
         fullFixture();
+        countOn(busA, shiftA.getId(), 3, NOW.minusSeconds(20));
+
+        mockMvc.perform(get(URL).with(supervisorJwt(company.getId())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.buses[0].occupancy.status").value("CURRENT"))
+            .andExpect(jsonPath("$.buses[0].occupancy.reason").value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$.buses[0].occupancy.count").value(3))
+            .andExpect(jsonPath("$.buses[0].occupancy.capacity").value(40))
+            .andExpect(jsonPath("$.buses[0].occupancy.load").value("WITHIN_CAPACITY"))
+            .andExpect(jsonPath("$.buses[0].occupancy.lastHeartbeatAt").value("2030-09-01T11:59:40Z"));
+    }
+
+    @Test
+    void s1_staleOccupancyKeepsTheCountAndSaysSo() throws Exception {
+        fullFixture();
+        countOn(busA, shiftA.getId(), 3, NOW.minusSeconds(121));
+
+        mockMvc.perform(get(URL).with(supervisorJwt(company.getId())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.buses[0].occupancy.status").value("STALE"))
+            .andExpect(jsonPath("$.buses[0].occupancy.count").value(3));
+    }
+
+    @Test
+    void s1_openPassengerGroupsAreShownWithCountsAndStatesOnly() throws Exception {
+        fullFixture();
+        PassengerRequestGroup first = openGroup(busA, shiftA.getId(), NOW.minusSeconds(120));
+        PassengerRequestGroup second = openGroup(busA, shiftA.getId() + 1_000_000L, NOW.minusSeconds(60));
+        PassengerRequestGroup stored = groupRepository.findById(second.getId()).orElseThrow();
+        stored.moveToAwaitingApproval(NOW.minusSeconds(30));
+        groupRepository.save(stored);
+
+        mockMvc.perform(get(URL).with(supervisorJwt(company.getId())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.buses[0].passengerGroups.length()").value(2))
+            .andExpect(jsonPath("$.buses[0].passengerGroups[0].status").value("COLLECTING"))
+            .andExpect(jsonPath("$.buses[0].passengerGroups[0].requestCount").value(0))
+            .andExpect(jsonPath("$.buses[0].passengerGroups[0].windowStartedAt")
+                .value(first.getWindowStartedAt().toString()))
+            .andExpect(jsonPath("$.buses[0].passengerGroups[0].awaitingSince")
+                .value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$.buses[0].passengerGroups[0].emergency")
+                .value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$.buses[0].passengerGroups[1].status").value("AWAITING_APPROVAL"))
+            .andExpect(jsonPath("$.buses[0].passengerGroups[1].awaitingSince").value("2030-09-01T11:59:30Z"))
+            .andExpect(jsonPath("$.buses[1].passengerGroups.length()").value(0));
+    }
+
+    @Test
+    void s1_requestCountIsTheCountedContributorsAndAttachedCountIsTheExtraEvidence() throws Exception {
+        PassengerRequestGroup g = openGroup(busA, shiftA.getId(), NOW.minusSeconds(60));
+        for (int i = 0; i < 3; i++) {
+            requestOn(g, RequestStatus.COUNTED);
+        }
+        requestOn(g, RequestStatus.ATTACHED);
+        requestOn(g, RequestStatus.ATTACHED);
+
+        mockMvc.perform(get(URL).with(supervisorJwt(company.getId())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.buses[0].passengerGroups[0].requestCount").value(3))
+            .andExpect(jsonPath("$.buses[0].passengerGroups[0].attachedCount").value(2));
+    }
+
+    @Test
+    void s1_aGroupOfAnotherCompanyNeverAppears() throws Exception {
+        Bus foreign = saveBus(otherCompany, "FM-G");
+        openGroup(foreign, 1L, NOW.minusSeconds(60));
 
         mockMvc.perform(get(URL).with(supervisorJwt(company.getId())))
             .andExpect(status().isOk())
@@ -276,11 +392,15 @@ class FleetOverviewControllerTest {
     @Test
     void s1_bodyNeverContainsSensitiveFieldsOrValues() throws Exception {
         fullFixture();
+        countOn(busA, shiftA.getId(), 1, NOW);
+        openGroup(busA, shiftA.getId(), NOW.minusSeconds(60));
 
         String body = overviewBody().toLowerCase();
 
         for (String forbidden : List.of("qrcredential", "useraccountid", "loginid", "dni", "outcome",
-            "userresponse", "responsiblesupervisor", "faceimage", DRIVER_SECRET.toLowerCase())) {
+            "userresponse", "responsiblesupervisor", "faceimage", "message", "photo", "evidence",
+            "passengeruserid", "journeyid", "publicreference", "groupid", "keyhash", "sbk_",
+            DRIVER_SECRET.toLowerCase())) {
             assertFalse(body.contains(forbidden), "body must not contain " + forbidden);
         }
     }

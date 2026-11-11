@@ -279,7 +279,7 @@ class JourneyControllerTest {
         mockMvc.perform(post(JOURNEYS_URL + "/" + journey.getId() + "/end")
                 .with(passengerJwt(PASSENGER_USER_ID))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"reason\":\"AUTOMATIC_SEPARATION\"}"))
+                .content("{\"reason\":\"TELEPORT\"}"))
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("INVALID_END_REASON"));
         assertEquals(JourneyStatus.ACTIVE, journeyRepository.findById(journey.getId()).orElseThrow().getStatus());

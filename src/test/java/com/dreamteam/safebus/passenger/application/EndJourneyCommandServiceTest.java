@@ -42,7 +42,7 @@ class EndJourneyCommandServiceTest {
         when(journeyRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(journey));
         when(journeyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        EndJourneyResult result = service.end(new EndJourneyCommand(1L, USER_ID, "MANUAL"));
+        EndJourneyResult result = service.end(new EndJourneyCommand(1L, USER_ID, "MANUAL", null, null, null));
 
         assertEquals(JourneyStatus.ENDED, result.status());
         assertEquals(JourneyEndReason.MANUAL, result.endReason());
@@ -57,7 +57,7 @@ class EndJourneyCommandServiceTest {
         when(journeyRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(journey));
         when(journeyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        EndJourneyResult result = service.end(new EndJourneyCommand(1L, USER_ID, "SIGN_OUT"));
+        EndJourneyResult result = service.end(new EndJourneyCommand(1L, USER_ID, "SIGN_OUT", null, null, null));
 
         assertEquals(JourneyEndReason.SIGN_OUT, result.endReason());
         assertEquals(JourneyEndReason.SIGN_OUT, journey.getEndReason());
@@ -69,13 +69,13 @@ class EndJourneyCommandServiceTest {
         Instant firstEnd = Instant.parse("2026-01-01T11:00:00Z");
         journey.end(JourneyEndReason.MANUAL, firstEnd);
         when(journeyRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(journey));
-        when(journeyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        EndJourneyResult result = service.end(new EndJourneyCommand(1L, USER_ID, "SIGN_OUT"));
+        EndJourneyResult result = service.end(new EndJourneyCommand(1L, USER_ID, "SIGN_OUT", null, null, null));
 
         assertEquals(JourneyStatus.ENDED, result.status());
         assertEquals(firstEnd, result.endedAt());
         assertEquals(JourneyEndReason.MANUAL, result.endReason());
+        verify(journeyRepository, never()).save(any());
     }
 
     @Test
@@ -83,7 +83,7 @@ class EndJourneyCommandServiceTest {
         when(journeyRepository.findByIdForUpdate(1L)).thenReturn(Optional.empty());
 
         ForbiddenOperationException ex = assertThrows(ForbiddenOperationException.class,
-            () -> service.end(new EndJourneyCommand(1L, USER_ID, "MANUAL")));
+            () -> service.end(new EndJourneyCommand(1L, USER_ID, "MANUAL", null, null, null)));
         assertEquals("JOURNEY_ACCESS_DENIED", ex.code());
     }
 
@@ -93,14 +93,14 @@ class EndJourneyCommandServiceTest {
         when(journeyRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(journey));
 
         ForbiddenOperationException ex = assertThrows(ForbiddenOperationException.class,
-            () -> service.end(new EndJourneyCommand(1L, 999L, "MANUAL")));
+            () -> service.end(new EndJourneyCommand(1L, 999L, "MANUAL", null, null, null)));
         assertEquals("JOURNEY_ACCESS_DENIED", ex.code());
     }
 
     @Test
     void end_invalidReason_throwsInvalidEndReason() {
         RuleViolationException ex = assertThrows(RuleViolationException.class,
-            () -> service.end(new EndJourneyCommand(1L, USER_ID, "AUTOMATIC_SEPARATION")));
+            () -> service.end(new EndJourneyCommand(1L, USER_ID, "TELEPORT", null, null, null)));
         assertEquals("INVALID_END_REASON", ex.code());
     }
 
@@ -110,7 +110,7 @@ class EndJourneyCommandServiceTest {
         when(journeyRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(journey));
         when(journeyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        EndJourneyResult result = service.end(new EndJourneyCommand(1L, USER_ID, null));
+        EndJourneyResult result = service.end(new EndJourneyCommand(1L, USER_ID, null, null, null, null));
 
         assertEquals(JourneyEndReason.MANUAL, result.endReason());
         assertEquals(JourneyEndReason.MANUAL, journey.getEndReason());
@@ -119,7 +119,71 @@ class EndJourneyCommandServiceTest {
     @Test
     void end_blankReason_throwsInvalidEndReason() {
         RuleViolationException ex = assertThrows(RuleViolationException.class,
-            () -> service.end(new EndJourneyCommand(1L, USER_ID, "  ")));
+            () -> service.end(new EndJourneyCommand(1L, USER_ID, "  ", null, null, null)));
         assertEquals("INVALID_END_REASON", ex.code());
+    }
+
+    @Test
+    void end_automaticSeparationWithOriginalTimeAndSummary_storesThem() {
+        PassengerJourney journey = PassengerJourney.start(USER_ID, 10L, 20L,
+            Clock.fixed(Instant.parse("2026-01-01T11:00:00Z"), ZoneOffset.UTC));
+        when(journeyRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(journey));
+        when(journeyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        Instant original = Instant.parse("2026-01-01T11:30:00Z");
+
+        EndJourneyResult result = service.end(
+            new EndJourneyCommand(1L, USER_ID, "AUTOMATIC_SEPARATION", original, 130, 65));
+
+        assertEquals(JourneyEndReason.AUTOMATIC_SEPARATION, result.endReason());
+        assertEquals(original, result.endedAt());
+        assertEquals(130, result.summary().distanceMeters());
+        assertEquals(65, result.summary().durationSeconds());
+    }
+
+    @Test
+    void end_summaryWithManualReason_isRejectedBeforeAnyLookup() {
+        RuleViolationException ex = assertThrows(RuleViolationException.class,
+            () -> service.end(new EndJourneyCommand(1L, USER_ID, "MANUAL", null, 130, 65)));
+        assertEquals("INVALID_END_SUMMARY", ex.code());
+        verifyNoInteractions(journeyRepository);
+    }
+
+    @Test
+    void end_halfASummary_isRejected() {
+        RuleViolationException ex = assertThrows(RuleViolationException.class,
+            () -> service.end(new EndJourneyCommand(1L, USER_ID, "AUTOMATIC_SEPARATION", null, 130, null)));
+        assertEquals("INVALID_END_SUMMARY", ex.code());
+    }
+
+    @Test
+    void end_alreadyEnded_ignoresTheNewReasonTimeAndSummaryAndSavesNothing() {
+        PassengerJourney journey = PassengerJourney.start(USER_ID, 10L, 20L,
+            Clock.fixed(Instant.parse("2026-01-01T10:00:00Z"), ZoneOffset.UTC));
+        Instant firstEnd = Instant.parse("2026-01-01T11:00:00Z");
+        journey.end(JourneyEndReason.MANUAL, firstEnd);
+        when(journeyRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(journey));
+
+        EndJourneyResult result = service.end(new EndJourneyCommand(1L, USER_ID, "AUTOMATIC_SEPARATION",
+            Instant.parse("2026-01-01T10:30:00Z"), 130, 65));
+
+        assertEquals(JourneyEndReason.MANUAL, result.endReason());
+        assertEquals(firstEnd, result.endedAt());
+        assertNull(result.summary());
+        verify(journeyRepository, never()).save(any());
+    }
+
+    @Test
+    void end_foreignAndUnknownJourneysAreIndistinguishable() {
+        PassengerJourney journey = PassengerJourney.start(USER_ID, 10L, 20L, CLOCK);
+        when(journeyRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(journey));
+        when(journeyRepository.findByIdForUpdate(2L)).thenReturn(Optional.empty());
+
+        ForbiddenOperationException foreign = assertThrows(ForbiddenOperationException.class,
+            () -> service.end(new EndJourneyCommand(1L, 999L, "MANUAL", null, null, null)));
+        ForbiddenOperationException unknown = assertThrows(ForbiddenOperationException.class,
+            () -> service.end(new EndJourneyCommand(2L, USER_ID, "MANUAL", null, null, null)));
+
+        assertEquals(foreign.code(), unknown.code());
+        assertEquals(foreign.getMessage(), unknown.getMessage());
     }
 }

@@ -7,6 +7,7 @@ import com.dreamteam.safebus.passenger.application.StartJourneyCommand;
 import com.dreamteam.safebus.passenger.application.StartJourneyCommandService;
 import com.dreamteam.safebus.passenger.application.StartJourneyResult;
 import com.dreamteam.safebus.shared.application.CurrentUserProvider;
+import com.dreamteam.safebus.shared.domain.exceptions.ForbiddenOperationException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -59,16 +60,33 @@ public class JourneyController {
     }
 
     @PostMapping("/{id}/end")
-    @Operation(summary = "End a passenger journey; reason is optional and defaults to MANUAL")
-    @ApiResponse(responseCode = "200", description = "Journey ended (or already ended: original status, endedAt and endReason are returned)")
+    @Operation(summary = "End a passenger journey",
+        description = "reason is optional and defaults to MANUAL; AUTOMATIC_SEPARATION may carry the app's "
+            + "original endedAt and the separation summary. A repeated call returns the original end data "
+            + "and changes nothing.")
+    @ApiResponse(responseCode = "200", description = "Journey ended (or already ended: original data returned)")
     @ApiResponse(responseCode = "401", description = "No token provided")
-    @ApiResponse(responseCode = "403", description = "Passenger role required or journey access denied")
-    @ApiResponse(responseCode = "422", description = "INVALID_END_REASON")
-    public EndJourneyResource end(@PathVariable Long id, @RequestBody(required = false) EndJourneyRequest request) {
+    @ApiResponse(responseCode = "403", description = "Passenger role required or JOURNEY_ACCESS_DENIED "
+        + "(foreign, unknown or malformed id)")
+    @ApiResponse(responseCode = "422", description = "INVALID_END_REASON, INVALID_END_TIME or INVALID_END_SUMMARY")
+    public EndJourneyResource end(@PathVariable String id, @RequestBody(required = false) EndJourneyRequest request) {
         Long userId = currentUserProvider.current().userId();
-        String reason = request == null ? null : request.reason();
-        EndJourneyResult result = endService.end(new EndJourneyCommand(id, userId, reason));
+        EndJourneyRequest body = request == null ? new EndJourneyRequest(null, null, null) : request;
+        EndJourneyRequest.Summary summary =
+            body.summary() == null ? new EndJourneyRequest.Summary(null, null) : body.summary();
+        EndJourneyResult result = endService.end(new EndJourneyCommand(parseJourneyId(id), userId, body.reason(),
+            body.endedAt(), summary.separationDistanceMeters(), summary.separationDurationSeconds()));
+        EndJourneyResource.Summary resource = result.summary() == null ? null
+            : new EndJourneyResource.Summary(result.summary().distanceMeters(), result.summary().durationSeconds());
         return new EndJourneyResource(result.journeyId(), result.status().name(),
-            result.endedAt(), result.endReason().name());
+            result.endedAt(), result.endReason().name(), resource);
+    }
+
+    private static Long parseJourneyId(String id) {
+        try {
+            return Long.valueOf(id);
+        } catch (NumberFormatException ex) {
+            throw new ForbiddenOperationException("JOURNEY_ACCESS_DENIED", "journey not found or access denied");
+        }
     }
 }

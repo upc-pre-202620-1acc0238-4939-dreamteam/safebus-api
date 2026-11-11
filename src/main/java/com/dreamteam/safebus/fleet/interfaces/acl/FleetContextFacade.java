@@ -166,6 +166,16 @@ public class FleetContextFacade {
             .toList();
     }
 
+    // Buses without a recorded capacity and unknown ids are absent; an empty or null collection does not query
+    public Map<Long, Integer> findCapacitiesByBusIds(Collection<Long> busIds) {
+        if (busIds == null || busIds.isEmpty()) {
+            return Map.of();
+        }
+        return busRepository.findAllById(busIds).stream()
+            .filter(b -> b.getCapacity() != null)
+            .collect(Collectors.toUnmodifiableMap(Bus::getId, Bus::getCapacity));
+    }
+
     // Unknown ids are absent from the result; an empty or null collection does not query
     public Map<Long, DriverSummary> findDriversByIds(Collection<Long> ids) {
         if (ids == null || ids.isEmpty()) {

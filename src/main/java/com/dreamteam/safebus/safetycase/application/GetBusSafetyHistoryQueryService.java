@@ -1,5 +1,6 @@
 package com.dreamteam.safebus.safetycase.application;
 
 public interface GetBusSafetyHistoryQueryService {
-    GetBusSafetyHistoryResult getForBus(Long busId);
+    // Malformed ids and a shift other than the one of the active journey are denied like any other bus.
+    GetBusSafetyHistoryResult getForBus(String busId, String shiftId);
 }

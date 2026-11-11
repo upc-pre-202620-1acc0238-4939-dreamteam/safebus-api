@@ -1,5 +1,7 @@
 package com.dreamteam.safebus.passenger.domain.model;
 
+import com.dreamteam.safebus.shared.domain.TimePolicy;
+import com.dreamteam.safebus.shared.domain.exceptions.RuleViolationException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -11,6 +13,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
@@ -45,6 +48,12 @@ public class PassengerJourney {
     @Column
     private JourneyEndReason endReason;
 
+    @Column
+    private Integer separationDistanceMeters;
+
+    @Column
+    private Integer separationDurationSeconds;
+
     // 1 while ACTIVE, null once ENDED; the unique constraint allows multiple NULLs in MySQL/H2
     @Column(name = "active_marker")
     private Integer activeMarker;
@@ -63,14 +72,51 @@ public class PassengerJourney {
     }
 
     public boolean end(JourneyEndReason reason, Instant now) {
+        return end(reason, null, null, now);
+    }
+
+    // A replay on an ended journey changes nothing; the first end wins.
+    public boolean end(JourneyEndReason reason, Instant reportedEndedAt, SeparationSummary summary, Instant now) {
         if (status == JourneyStatus.ENDED) {
             return false;
         }
+        Instant resolved = resolveEndedAt(reportedEndedAt, now.truncatedTo(ChronoUnit.MILLIS));
+        if (summary != null) {
+            if (reason != JourneyEndReason.AUTOMATIC_SEPARATION) {
+                throw new RuleViolationException("INVALID_END_SUMMARY",
+                    "a separation summary is only valid with reason AUTOMATIC_SEPARATION");
+            }
+            if (summary.durationSeconds() > Duration.between(startedAt, resolved).getSeconds()) {
+                throw new RuleViolationException("INVALID_END_SUMMARY",
+                    "separation duration must not exceed the length of the journey");
+            }
+            this.separationDistanceMeters = summary.distanceMeters();
+            this.separationDurationSeconds = summary.durationSeconds();
+        }
         this.status = JourneyStatus.ENDED;
-        this.endedAt = now.truncatedTo(ChronoUnit.MILLIS);
+        this.endedAt = resolved;
         this.endReason = reason;
         this.activeMarker = null;
         return true;
+    }
+
+    private Instant resolveEndedAt(Instant reportedEndedAt, Instant now) {
+        if (reportedEndedAt == null) {
+            return now;
+        }
+        Instant reported = reportedEndedAt.truncatedTo(ChronoUnit.MILLIS);
+        if (reported.isBefore(startedAt)) {
+            throw new RuleViolationException("INVALID_END_TIME", "endedAt must not be before the journey start");
+        }
+        if (reported.isAfter(now.plus(TimePolicy.MAX_FUTURE_SKEW))) {
+            throw new RuleViolationException("INVALID_END_TIME", "endedAt must not be more than 5 minutes in the future");
+        }
+        return reported.isAfter(now) ? now : reported;
+    }
+
+    public SeparationSummary getSeparationSummary() {
+        return separationDistanceMeters == null ? null
+            : new SeparationSummary(separationDistanceMeters, separationDurationSeconds);
     }
 
     public Long getId() { return id; }

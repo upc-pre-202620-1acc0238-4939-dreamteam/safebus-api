@@ -15,6 +15,8 @@ public interface PassengerJourneyRepository extends JpaRepository<PassengerJourn
 
     Optional<PassengerJourney> findByUserAccountIdAndStatus(Long userAccountId, JourneyStatus status);
 
+    Optional<PassengerJourney> findByIdAndUserAccountId(Long id, Long userAccountId);
+
     boolean existsByUserAccountIdAndBusIdAndStatus(Long userAccountId, Long busId, JourneyStatus status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

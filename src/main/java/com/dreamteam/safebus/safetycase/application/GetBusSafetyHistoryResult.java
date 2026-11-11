@@ -8,5 +8,6 @@ public record GetBusSafetyHistoryResult(Long busId, Long shiftId, List<Item> ite
         items = List.copyOf(items);
     }
 
-    public record Item(String reference, String source, Instant recordedAt, String state) {}
+    public record Item(String reference, String source, Instant recordedAt, String state, String stateLabel,
+                       Integer requestCount) {}
 }

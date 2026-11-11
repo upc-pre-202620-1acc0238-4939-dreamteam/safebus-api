@@ -5,6 +5,7 @@ import com.dreamteam.safebus.contact.application.RegisterContactRequestCommand;
 import com.dreamteam.safebus.contact.application.RegisterContactRequestResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -28,6 +29,7 @@ public class ContactRequestController {
     }
 
     @PostMapping
+    @SecurityRequirements
     @Operation(summary = "Submit a company contact request")
     @ApiResponse(responseCode = "201", description = "Contact request registered")
     @ApiResponse(responseCode = "200", description = "Identical retry; original receipt returned")

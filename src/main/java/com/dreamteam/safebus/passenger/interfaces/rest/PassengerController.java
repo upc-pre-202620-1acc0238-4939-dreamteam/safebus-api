@@ -5,6 +5,7 @@ import com.dreamteam.safebus.passenger.application.RegisterPassengerCommandServi
 import com.dreamteam.safebus.passenger.application.RegisterPassengerResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,6 +31,7 @@ public class PassengerController {
 
     @PostMapping(consumes = "multipart/form-data")
     @ResponseStatus(HttpStatus.CREATED)
+    @SecurityRequirements
     @Operation(summary = "Register a passenger account")
     @ApiResponse(responseCode = "201", description = "Passenger registered")
     @ApiResponse(responseCode = "409", description = "DNI already registered (DNI_ALREADY_REGISTERED)")
